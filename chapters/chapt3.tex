@@ -259,29 +259,130 @@ HWC2,由于龙芯硬件的限制，HWC实际上使用的是hwcomposer1.0的实�
   \end{algorithm}
 \end{minipage}
 
-\subsubsection{命令流管理模块}
-\subsubsection{显示控制模块}
-\subsubsection{转换表映射模块}
-LG110内存模型
+% \subsubsection{命令流管理模块}
+% \subsubsection{显示控制模块}
+% \subsubsection{转换表映射模块}
+\subsubsection{GSPGU驱动内核模块的实现}
 
-GPU 内存在物理上分为两个部分，
-一部分是 GPU 本地的 VRAM 内存，另外一部分位于系统主存，也就是 GPU 的GTT 内存。GPU 的 VRAM 内存被映射到 CPU 的 PCI 地址空间中，而 GPU 的GTT 内存通过页表映射到系统主存上。
-CPU可以通过PCI地址直接访问GPU的VRAM地址内存，而GPU的GTT内存实际上是系统内存，应用程序可以通过MMU将物理地址映射到用户地址空间再访问。
-而GPU内部进行访问时，若GPU地址位于GTT内存时，通过DMA请求将数据异步传输到GPU。
+1.缓冲区功能的实现：
+
+LG110内存模型分析：
+
+LG110的内存架构分为两部分：GPU本地的VRAM和系统主存中的GTT内存。如图\ref{fig:LG110内存模型}GPU的VRAM被映射到CPU的PCI地址空间，而GTT内存则通过页表映射到系统内存中。
+CPU可以直接通过PCI地址访问GPU的VRAM，而GTT内存则通过MMU映射到用户空间进行访问。GPU若访问GTT内存时，会通过DMA请求将数据异步传输到GPU。
+CPU访问GPU内存和GPU访问GPU内存有不同的方式:
+CPU访问GPU内存时通过PCI地址可以直接访问 GPU 的 VRAM 内存，而由于GPU的GTT内存本质上是系统内存，应用程序和内核可以通过 MMU 将主存物理地址分别映射到用户地址空间和内核地址空间再访问。
+GPU访问GPU内存时GPU 通过页表机制访问 GPU 内存。对于 VRAM，页表中填的物理地址是 VRAM 的实际物理地址，而对于系统主存，页表上填的物理地址是 DMA 地址。
+因此当GPU地址位于系统主存上时，根据 DMA的地址发起 DMA 请求，通过 DMA 获取数据。
+
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.8\textwidth]{LG110内存模型.jpg}
   \caption{LG110内存模型}
+  \label{fig:LG110内存模型}
 \end{figure}
-转换表映射模块：
-TTM(Translation Table Maps)适用于GPU内存管理的一部分，提供了对显存（VRAM）、主存、共享内存等不同类型内存的管理功能。
-它通过一个通用的 API 提供内存分配、缓冲区对象管理和内存交换等功能，使得 GPU 驱动能够灵活管理图形资源。
-TTM 需要实现的功能有：缓冲区对象（BO）创建与销毁、 内存管理与分配、内存驱逐和交换、内存访问控制、I/O 内存管理和缓冲区对象的绑定与解绑。
+
+% 转换表映射模块：
+% TTM(Translation Table Manager)适用于GPU内存管理的一部分，提供了对显存（VRAM）、主存、共享内存等不同类型内存的管理功能。
+% 它通过一个通用的 API 提供内存分配、缓冲区对象管理和内存交换等功能，使得 GPU 驱动能够灵活管理图形资源。
+% TTM 需要实现的功能有：缓冲区对象（BO）创建与销毁、 内存管理与分配、内存驱逐和交换、内存访问控制、I/O 内存管理和缓冲区对象的绑定与解绑。
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{DRM TTM结构.jpg}
+%   \caption{TTM主要对象}
+% \end{figure}
+
+2.ioctl设计实现
+
+在 Linux 驱动程序中，除了基本的设备读写操作（即 读取 和 写入 数据）外，设备驱动程序还需要支持对设备执行各种 控制操作。
+这些控制操作通常是通过 ioctl（Input/Output Control）机制来实现的，它提供了一种用户空间和内核空间之间进行特定设备操作交互的方式。
+IOCTL 可以用于实现设备驱动的各种功能，包括配置设备、读取设备状态、传输数据、控制设备行为等， 而这些具体的功能需要在驱动程序中实现。
+在DRM框架中，libdrm是沟通和连接内核空间和用户空间的重要一环。它通过对多种ioctl底层接口进行封装，以向上提供通用的接口。用户空间的驱动可以通过
+libdrm提供的库函数与系统内核进行交互，从而访问底层资源。如图\ref{fig:内核驱动结构图}，libdrm\_gsgpu作为安卓用户空间的驱动程序，它会与底层的DRM内核驱动程序进行通信，
+从而完成配置、读取、传输、控制设备等多种行为。
+
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{DRM TTM结构.jpg}
-  \caption{TTM主要对象}
+  \includegraphics[width=0.8\textwidth]{内核驱动结构图.jpg}
+  \caption{内核驱动结构图}
+  \label{fig:内核驱动结构图}
 \end{figure}
+
+linux内核中，ioctl的命令码的结构是一个32位的整数，由四个部分组成，从高位往低位依次是\ref{fig:ioctl命令码结构}：
+方向位，定义了数据传输的方向，可能的值有\_IOC\_NONE(无数据)、\_IOC\_READ（内核读）、\_IOC\_WRITE（内核写）、\_IOC\_READ|\_IOC\_WRITE（双向数据）；
+类型，又称幻数，唯一标志一个驱动或者模块,防止命令码冲突,通常会选择一个ASCII 字符，确保不同驱动间的幻数不重复，本文由于涉及到的是drm模块所以是d，
+同时幻数定义需要在内核驱动和用户空间如libdrm中头文件保持一致；
+序号，是为了区分同一驱动内的不同 ioctl 命令;数据大小则是ioctl操作涉及的数据结构大小（以字节为单位）,具体的定义如\ref{fig:IOCTL宏定义}。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{ioctl命令码结构.jpg}
+  \caption{ioctl命令码结构}
+  \label{fig:ioctl命令码结构}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{IOCTL宏定义.png}
+  \caption{IOCTL宏定义}
+  \label{fig:IOCTL宏定义}
+\end{figure}
+
+在课题场景下，需要将内核调用的结果返回，因此使用双向的数据传输作为基础，实现GSGPU的ioctl。
+为了给用户态程序提供创建和管理 GEM（图形内存对象）到处理上下文、命令流、内存映射、调度等支持，定义了如下ioctl命令码：
+
+\begin{table}[h]  
+  \centering
+  \caption{IOCTL命令码}
+  \label{tab:IOCTL命令码}
+  \resizebox{\linewidth}{!}{
+  \begin{tabular}{ll}
+    \toprule
+    宏名  & 命令码\\  
+    \midrule
+    DRM\_IOCTL\_GSGPU\_GEM\_CREATE   &   DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_CREATE, union drm\_gsgpu\_gem\_create) \\
+    DRM\_IOCTL\_GSGPU\_GEM\_MMAP   &     DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_MMAP, union drm\_gsgpu\_gem\_mmap)\\
+    DRM\_IOCTL\_GSGPU\_CTX        &     DRM\_IOWR(BASE + DRM\_GSGPU\_CTX, union drm\_gsgpu\_ctx)\\
+    DRM\_IOCTL\_GSGPU\_BO\_LIST  & DRM\_IOWR(BASE + DRM\_GSGPU\_BO\_LIST, union drm\_gsgpu\_bo\_list)\\
+    DRM\_IOCTL\_GSGPU\_CS         &     DRM\_IOWR(BASE + DRM\_GSGPU\_CS, union drm\_gsgpu\_cs)\\
+    DRM\_IOCTL\_GSGPU\_INFO       &     DRM\_IOW(BASE + DRM\_GSGPU\_INFO, struct drm\_gsgpu\_info)\\
+    DRM\_IOCTL\_GSGPU\_GEM\_METADATA  &  DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_METADATA, struct drm\_gsgpu\_gem\_metadata)\\
+    DRM\_IOCTL\_GSGPU\_GEM\_WAIT\_IDLE &  DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_WAIT\_IDLE, union drm\_gsgpu\_gem\_wait\_idle)\\
+    DRM\_IOCTL\_GSGPU\_GEM\_VA       &   DRM\_IOW(BASE + DRM\_GSGPU\_GEM\_VA, struct drm\_gsgpu\_gem\_va)\\
+    DRM\_IOCTL\_GSGPU\_WAIT\_CS & DRM\_IOWR(BASE + DRM\_GSGPU\_WAIT\_CS, union drm\_gsgpu\_wait\_cs)\\
+    DRM\_IOCTL\_GSGPU\_GEM\_OP    &      DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_OP, struct drm\_gsgpu\_gem\_op)\\
+    DRM\_IOCTL\_GSGPU\_GEM\_USERPTR   &  DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_USERPTR, struct drm\_gsgpu\_gem\_userptr)\\
+    DRM\_IOCTL\_GSGPU\_WAIT\_FENCES   &  DRM\_IOWR(BASE + DRM\_GSGPU\_WAIT\_FENCES, union drm\_gsgpu\_wait\_fences)\\
+    DRM\_IOCTL\_GSGPU\_VM            &  DRM\_IOWR(BASE + DRM\_GSGPU\_VM, union drm\_gsgpu\_vm)\\
+    DRM\_IOCTL\_GSGPU\_FENCE\_TO\_HANDLE & DRM\_IOWR(BASE + DRM\_GSGPU\_FENCE\_TO\_HANDLE, union drm\_gsgpu\_fence\_to\_handle)\\
+    DRM\_IOCTL\_GSGPU\_SCHED         &  DRM\_IOW(BASE + DRM\_GSGPU\_SCHED, union drm\_gsgpu\_sched)\\
+    DRM\_IOCTL\_GSGPU\_HWSEMA\_OP      & DRM\_IOWR(BASE + DRM\_GSGPU\_HWSEMA\_OP, struct drm\_gsgpu\_hw\_sema)\\
+    \bottomrule
+  \end{tabular}
+  }
+  \note{
+    BASE=DRM\_COMMAND\_BASE
+  }
+\end{table}
+
+% DRM_IOCTL_DEF_DRV(GSGPU_GEM_CREATE, gsgpu_gem_create_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_CTX, gsgpu_ctx_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_VM, gsgpu_vm_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_SCHED, gsgpu_sched_ioctl, DRM_MASTER),
+%         DRM_IOCTL_DEF_DRV(GSGPU_BO_LIST, gsgpu_bo_list_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_FENCE_TO_HANDLE, gsgpu_cs_fence_to_handle_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         /* KMS */
+%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_MMAP, gsgpu_gem_mmap_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_WAIT_IDLE, gsgpu_gem_wait_idle_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_CS, gsgpu_cs_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_INFO, gsgpu_info_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_WAIT_CS, gsgpu_cs_wait_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_WAIT_FENCES, gsgpu_cs_wait_fences_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_METADATA, gsgpu_gem_metadata_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_VA, gsgpu_gem_va_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_OP, gsgpu_gem_op_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_USERPTR, gsgpu_gem_userptr_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
+%         DRM_IOCTL_DEF_DRV(GSGPU_HWSEMA_OP, gsgpu_hw_sema_op_ioctl, DRM_AUTH|DRM_RENDER_ALLOW)
 
 \subsection{mesa}
 mesa使用的版本为18.3.6,而由于现有的安卓版本为12.0.0,安卓API版本为31对应的mesa版本为20.3.4,因此需要对现有的mesa的dri接口进行升级。并且由于安卓新的
@@ -340,9 +441,45 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 
 \subsubsection{硬件混合渲染模块}
 %每个厂商hwc实现可能不同如nxp，rockchip，drm-hwc，ranchu，也有很多厂商实现是闭源的如nxp，而谷歌的drm-hwc，ranchu是开源的
-由于没有硬件HWComposer，因此SurfaceFlinger的画面合成过程是基于OpenGL ES完成的，是使用client模式合成，因此hwcomposer.drm\_minigbm.so只是一个符合HWComposer1.0接口标准的软件实现，
-并不是硬件HWComposer的驱动程序。它在进行画面更新时实际上会先atomic设置plane的状态，实际上就是调用libdrm的drmModeAtomicAddProperty接口，用于设置显示设备的相关属性，然后atomic向
+Google从OREO（Android8）开始强制要求设备实现 HWC 2.x 及以上版本,但是由于龙芯目前的硬件不支持HWComposer，因此hwcomposer.loongarch.so只是一个符合
+HWComposer1.0接口标准的软件实现，并不是硬件HWComposer的驱动程序。
+SurfaceFlinger的画面合成过程实际上是基于OpenGL ES完成的，是使用client模式合成，也就是使用renderengine（课题使用的是支持了龙芯驱动的skia渲染引擎）合成。
+这里的client合成实际上是相对于HWC硬件合成而言的，其合成方式是将layer的内容用GPU渲染到缓冲区，然后由缓冲区送显到显示控制器。
+
+它在进行画面更新时实际上会先atomic设置plane的状态，实际上就是调用libdrm的drmModeAtomicAddProperty接口，用于设置显示设备的相关属性，然后atomic向
 底层drm系统提交显示信息，也就是调用libdrm的drmModeAtomicCommit接口，更改显示设备的配置。
+
+1.HWC合成周期
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{HWC周期.jpg}
+  \caption{HWC周期}
+  \label{fig:HWC周期}
+\end{figure}
+
+准备阶段：
+每当屏幕内容需要更新时，SurfaceFlinger 会调用 prepare 函数，遍历所有图层并标记它们的合成方式（通过硬件加速device方式还是通过 GPU 合成client方式）。
+此时会根据图层内容的变化（例如 UI 更新、视频播放等）重新评估每个图层的合成方式
+验证与提交阶段：
+在每次显示刷新之前，SurfaceFlinger 会调用 validateDisplay 来检查当前的显示配置是否可以创建DrmKms计划，以检查硬件是否支持。
+如果硬件支持，则生成 DrmKmsPlan 并准备提交显示计划（调用 presentDisplay提交DRM原子操作）。如果硬件不支持，则回退到 GPU 合成
+图层提交阶段：
+在提交图层时，SurfaceFlinger 会使用 setLayerBuffer 更新每个图层的缓冲区，并通过 DrmFbImporter 将 Gralloc Buffer 转换为 DRM Framebuffer。
+这些 Framebuffer 会被绑定到相应的 DRM Plane，然后将图层显示到屏幕上。
+
+2.设备监测
+显示器热插拔：
+
+UEventListener 检测到 HDMI 插入 → ResourceManager 重新扫描 Connector → 通知 HWC2 模块更新显示配置。
+
+提交显示配置：
+
+HWC2 调用 DrmAtomicStateManager → 配置 Connector 的 CRTC、Plane 属性 → 提交原子操作。
+
+帧缓冲处理：
+
+DrmFbImporter 将 Android Buffer 转换为 drm\_fb → 绑定到 Plane 的 FB\_ID 属性。
+
 
 \subsubsection{图形缓存分配模块}
 由于Android系统主要用于arm架构，而arm架构下的GPU多数没有自己的独立显存，系统服务SurfaceFlinger申请的帧缓存属于系统内存，而在本课题中，LoongArch架构下，
@@ -413,26 +550,103 @@ Android自身提供了共享内存的机制，native\_handle\_t是一个用于�
   \note{}
 \end{table}
 
+其中最重要的三个方法就是init、bo create 和bo map，下面将简要描述三个方法的过程。
 
-1.gbm包装模块
-用于在使用 Mesa 和 GBM（Generic Buffer Management）时对显存缓冲区（BO，Buffer Object）进行创建、映射、导入和销毁的操作。它通过封装与 GBM API 的交互，
-简化了底层内存管理，并与 Android 环境中的驱动配合。实现了以下4个功能模块：
-\textbf{缓冲区分配与管理}:缓冲区可用于多种渲染操作
+1.init
 
-\textbf{跨平台支持}：用于纹理处理等操作
+在驱动程序初始化时，这就需要设置不同的缓冲区格式和使用场景组合。在drv的数据结构中定义了一组向量用于存放定义的缓冲区格式及用途，
+可以使用drv\_add\_combinations、drv\_add\_combination 和 drv\_modify\_combination）这几个函数来配置存放的图形驱动的缓冲区管理设置。
+具体来说，这些操作是为了为支持不同类型的缓冲区（如扫描输出、纹理、视频编码/解码等）配置不同的格式和元数据。
+而常见的缓冲区类型如\ref{tab:缓冲区标志表}，这些标志用于标识缓冲区的不同使用场景，通常在图形和视频处理系统中使用。
+每个标志代表缓冲区的不同用途，允许驱动程序和硬件根据不同的用途进行优化或操作。
 
-\textbf{优化内存访问}：表示与软件处理相关
+\begin{table}[h]  
+  \centering
+  \caption{缓冲区标志表}
+  \label{tab:缓冲区标志表}
+  \begin{tabular}{ll}
+    \toprule
+    接口名  & 作用\\
+    \midrule
+    BO\_USE\_NONE & 表示没有任何用途。通常用于初始化或不需要使用标志的情况 \\
+    BO\_USE\_SCANOUT & 该标志表示缓冲区将用于显示输出 \\
+    BO\_USE\_CURSOR & 该标志表示缓冲区将用于显示光标 \\
+    BO\_USE\_RENDERING & 该标志表示缓冲区将用于渲染操作 \\
+    BO\_USE\_LINEAR & 该标志表示缓冲区的内存布局是线性的 \\
+    BO\_USE\_TEXTURE & 该标志表示缓冲区将作为纹理使用 \\
+    ... & ... \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-缓冲区分配与管理: 通过封装 GBM 的创建、导入、映射和销毁操作，实现了对缓冲区对象的管理，方便与其他模块进行交互。
+2.缓冲区创建（bo create）
 
-跨平台支持: 代码通过不同的条件编译支持在多种架构（如 x86\_64、ARM 等）上的适配，特别是不同平台上缓冲区的对齐和映射步长差异。
+如果是首次创建缓冲区时，需要先初始化并获取一个GbmMesaDriver的实例，使用shared\_ptr存放该实例。在创建时首先需要检查GPU是否需要KMS，
+因为一些GPU具有独立的显示控制器，而在龙芯显卡上显示控制器不是独立的。
+如果是则需要遍历系统中所有/dev/dri/card*和/dev/dri/renderD*设备节点用于寻找KMS设备，并作为gbm设备节点，如果不是则使用已获取的GPU设备节点作为gbm设备节点。
+之后会使用dlopen动态加载libgbm\_mesa\_wrapper.so GBM封装层的动态库，并使用dlsym查找库中的符号GBM\_GET\_OPS\_SYMBOL，该符号会返回一个包含了在gbm封装层接口表中的所有操作的结构体
+gbm\_ops。如果成功获取该gbm\_ops，则会调用该接口的dev create方法，以上述寻找的KMS节点文件描述符作为输入创建gbm设备节点作为实际的GBM设备实例。接下来，为 GbmMesaDriver 
+创建一个新的私有数据结构 GbmMesaDriverPriv，并将其保存到驱动的 priv 成员中。这样，下一次调用时，函数可以直接获取到已经初始化的 GbmMesaDriver 实例，避免重复初始化。
+最后返回 gbm\_mesa\_drv，即创建或已经初始化好的 GbmMesaDriver 实例。
+之后设置缓冲区分配参数，gbm即GBM设备，width 和 height即缓冲区的宽度和高度，drm\_format即缓冲区的格式，force\_linear 和 needs\_map\_stride
+这些上层调用时传入的 use\_flags设置，指示是否强制使用线性内存布局以及是否需要映射步幅，use\_scanout意思是是否需要扫描输出模式。在处理完无效的drm format格式之后，使用wrapper层的
+alloc方法进行缓冲区的分配。之后需要初始化缓冲区布局，为图形缓冲区对象计算和设置与格式相关的属性，如步幅（stride）、大小（size）、偏移量(offset)。
+步幅是指从缓冲区中某一行的开始位置到下一行开始位置的字节数。换句话说，它是缓冲区内每行数据的跨度，它告诉我们如何从当前行跳到下一行。
+偏移量是指从缓冲区的起始位置到某个数据元素（例如像素、行或平面）的内存地址的距离。它表示数据在缓冲区中的位置。
+大小表示缓冲区、图像或某个数据元素所占用的内存空间的大小，通常以字节为单位。
 
-优化内存访问: 在导入缓冲区时，确保正确的映射步长（map\_stride）处理，避免不同驱动和硬件上的差异，保证高效内存访问。
+计算步幅需要将原始步幅值stride与目标对齐值stride\_align向上对齐。
+\begin{equation}
+  stride=(stride+stride\_align-1)\&~(stride\_align-1)
+\end{equation}
+大小需要步幅乘以平面高度与该平面的垂直子采样因子向上取整。vertical\_subsampling是该平面的垂直子采样因子，表示该平面的高度相对于原始图像高度的缩放比例。
+\begin{equation}
+  size=((height+vertical\_subsampling-1)/vertical\_subsampling)*stride
+\end{equation}
+偏移量则是随着对于平面的循环，依次加上大小计算而来。
 
-调试与日志: 通过 ALOGE 和 ALOGV 等宏进行调试输出，帮助开发人员调试 GBM 缓冲区分配和管理过程。
+实际上，由于龙芯目前硬件支持的图形库较为有限，目前使用的硬件平台LG110图层仅支持primary和cursor格式，而不支持layout格式，图像格式上仅支持DRM\_FORMAT\_RGB565,DRM\_FORMAT\_RGB888,
+DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888，这些图层的垂直子采样因子皆为1,但是在设计上需要考虑后续对于其他图像格式的支持。
+最后创建一个新的私有数据结构 GbmMesaBoPriv，并将其与缓冲区 bo 关联，并设置缓冲区的文件描述符和映射步幅等信息。
 
-此外由于Android平台有自己的HAL\_PIXEL\_FORMAT格式，而DRM有自己的DRM\_FORMAT格式因此需要进行格式转换,所以按照mesa的标准，可以得出如下的格式转换表\ref{tab:HAL格式转换表},
-此处仅列出一些常用和目前课题硬件支持的图形格式。
+在调用wrapper层的alloc方法时，首先初始化alloc\_args作为gbm后端调用的参数，根据输入的参数对width、height进行对齐处理，然后使用wrapper封装的gbm接口，使用gbm\_bo\_create创建
+一个新的缓冲区对象bo，以bo作为参数以此调用gbm\_bo\_get\_fd获取缓冲区对象的文件描述符、gbm\_bo\_get\_stride获取缓冲区对象的步长、gbm\_bo\_get\_modifier获取缓冲区对象的格式修饰符，
+并在上述步骤完成后可以通过文件描述符对缓冲区进行处理，因此销毁gbm缓冲区对象及时释放资源，如图\ref{fig:alloc过程}。gbm中的缓冲区创建等实现实际上是基于直接渲染架构DRI,在创建dri device时，
+会搜索目标路径下的所有驱动（本课题使用的是gallium框架实现的驱动）并加载。具体实现会在用户态驱动实现中说明。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{alloc过程.jpg}
+  \caption{alloc过程}
+  \label{fig:alloc过程}
+\end{figure}
+
+% \begin{algorithm}[H]
+%   \SetAlgoLined
+%   \KwData{gralloc\_buffer\_descriptor，native\_handle\_t}
+%   \KwResult{int32\_t}
+%   allocate(){\\
+%   DRM驱动初始化检查\;
+%   ... \\
+%   Hal格式与DRM格式检查\;
+%   Driver->allocate\;  \tcp{调用驱动的allocate方法} 
+%   句柄转换native\_handle\_t 转换成gralloc\_handle\_t\;
+%   outHandle设置结果输出\;
+%   }
+%   \caption{allocate}
+%   \label{algo:allocate}
+% \end{algorithm}
+
+3.缓冲区映射（bo map）
+
+需要将一个图形缓冲区（bo）映射到用户空间，首先需要通过验证缓冲区的标志，该缓冲区需要有可以被软件访问的标志位，如果没有表示该缓冲区不能映射到用户空间。获取相关的驱动并设置映射的参数，
+以获取wrapper层对缓冲区操作的各种函数。在设置完缓冲区映射的大小、缓冲区的格式宽度高度之后，调用wrapper层的map方法来映射缓冲区。该map方法调用gbm\_bo\_map接口,该接口将调用底层
+实际的缓冲区映射操作。
+
+而前端gralloc的实现由于已经受到后端的封装，实现上主要依赖后端接口的调用，通过native\_handle\_t(在安卓开发中一种允许允许应用程序和系统服务共享原生资源的便捷抽象)用来存储获取的缓冲区，
+并通过hidlcb实现从HAL到Framework的异步回调，将缓冲区信息传输回上层。在这些处理中需要注意的是，Android平台有自己的HAL\_PIXEL\_FORMAT格式，而DRM有自己的DRM\_FORMAT格式因此
+需要进行格式转换,所以按照mesa的标准，可以得出如下的格式转换表\ref{tab:HAL格式转换表},此处仅列出一些常用和目前课题硬件支持的图形格式。
 
 \begin{table}[h]  
   \centering
@@ -453,93 +667,46 @@ Android自身提供了共享内存的机制，native\_handle\_t是一个用于�
   \note{}
 \end{table}
 
-gralloc模块分为HAL服务实现(可以称为gralloc前端)，gbm接口实现模块和gbm包装层（可以称为gralloc后端）。前端已有部分开源代码实现，因此可以使用公共层的代码，
-相应的，本课题只需要实现后端代码，即gbm的接口对接和封装等。
+% 1.gbm包装模块
+% 用于在使用 Mesa 和 GBM（Generic Buffer Management）时对显存缓冲区（BO，Buffer Object）进行创建、映射、导入和销毁的操作。它通过封装与 GBM API 的交互，
+% 简化了底层内存管理，并与 Android 环境中的驱动配合。实现了以下4个功能模块：
+% \textbf{缓冲区分配与管理}:缓冲区可用于多种渲染操作
 
-由于上层应用是通过gralloc获取实际的图像缓冲描述句柄，而由于不同进程使用图像缓冲区的目的不同。如UI进程是为了渲染画面并传送给SurfaceFlinger进行合成，而SurfaceFlinger是
-要在自己的缓冲区上合成帧画面并送显，因此图像缓冲区的类型往往不同。
+% \textbf{跨平台支持}：用于纹理处理等操作
 
-\textbf{BO\_USE\_RENDER\_MASK}:缓冲区可用于多种渲染操作
+% \textbf{优化内存访问}：表示与软件处理相关
 
-\textbf{BO\_USE\_TEXTURE\_MASK}：用于纹理处理等操作
+% 缓冲区分配与管理: 通过封装 GBM 的创建、导入、映射和销毁操作，实现了对缓冲区对象的管理，方便与其他模块进行交互。
 
-\textbf{BO\_USE\_SW\_MASK}：表示与软件处理相关
+% 跨平台支持: 代码通过不同的条件编译支持在多种架构（如 x86\_64、ARM 等）上的适配，特别是不同平台上缓冲区的对齐和映射步长差异。
 
-\textbf{BO\_USE\_GPU\_HW}：与GPU硬件加速相关
+% 优化内存访问: 在导入缓冲区时，确保正确的映射步长（map\_stride）处理，避免不同驱动和硬件上的差异，保证高效内存访问。
 
-\textbf{BO\_USE\_NON\_GPU\_HW}:表示与非GPU硬件加速相关
+% 调试与日志: 通过 ALOGE 和 ALOGV 等宏进行调试输出，帮助开发人员调试 GBM 缓冲区分配和管理过程。
 
-\textbf{BO\_USE\_HW\_MASK}:表示与所有硬件相关
+% gralloc模块分为HAL服务实现(可以称为gralloc前端)，gbm接口实现模块和gbm包装层（可以称为gralloc后端）。前端已有部分开源代码实现，因此可以使用公共层的代码，
+% 相应的，本课题只需要实现后端代码，即gbm的接口对接和封装等。
 
-%  缓冲区对象buffer object数据结构
-% 而gbm接口实现模块需要完成一些与硬件特性相关的接口函数，如：
+% 由于上层应用是通过gralloc获取实际的图像缓冲描述句柄，而由于不同进程使用图像缓冲区的目的不同。如UI进程是为了渲染画面并传送给SurfaceFlinger进行合成，而SurfaceFlinger是
+% 要在自己的缓冲区上合成帧画面并送显，因此图像缓冲区的类型往往不同。
 
-% \textbf{init\&close}:驱动程序的初始化和关闭
+% \textbf{BO\_USE\_RENDER\_MASK}:缓冲区可用于多种渲染操作
 
-% \textbf{bo create}：创建缓冲区对象（BO）的函数，实现内存分配和初始化
+% \textbf{BO\_USE\_TEXTURE\_MASK}：用于纹理处理等操作
 
-% \textbf{bo destroy}：销毁缓冲区对象的函数，负责释放已分配的内存
+% \textbf{BO\_USE\_SW\_MASK}：表示与软件处理相关
 
-% \textbf{bo import}：导入缓冲区对象的函数，允许将外部缓冲区导入到 GBM 管理的缓冲区中。
+% \textbf{BO\_USE\_GPU\_HW}：与GPU硬件加速相关
 
-% \textbf{bo map}:映射缓冲区对象的函数，使得 CPU 可以访问 GPU 分配的内存。
+% \textbf{BO\_USE\_NON\_GPU\_HW}:表示与非GPU硬件加速相关
 
-% \textbf{bo unmap}:解除映射缓冲区对象的函数，释放 CPU 对缓冲区的访问。
+% \textbf{BO\_USE\_HW\_MASK}:表示与所有硬件相关
 
-% \textbf{bo get plane fd}:获取缓冲区对象平面的文件描述符。在多平面的缓冲区（如YUV格式图像）中，平面文件描述符用于访问每个平面数据。
+% 缓冲区对象buffer object数据结构
 
-% \textbf{bo get map stride}:获取缓冲区对象的映射跨度。不同的缓冲区格式可能具有不同的内存布局（例如行对齐），stride 描述了每行数据的字节数
+% drmformat转换、回调框架说明、gralloc直通式等
 
-% \textbf{resolve format and use flags}:解析格式和使用标志的函数，用于确定如何使用缓冲区对象的数据格式及其相关标志
-
-缓冲区对象buffer object数据结构
-其中在创建缓冲区时会首次获取并初始化显卡驱动，如\ref{algo:gralloc初始化显卡驱动}，
-
-\begin{algorithm}[H]
-  \SetAlgoLined
-  \KwData{driver}
-  \KwResult{shared\_ptr<GbmMesaDriver>}
-  init\_driver(){\\
-    ...
-    遍历所有可用的DRM设备节点并获取相应的文件描述符fd\;
-    加载wrapper的动态库\;
-    调用gbm后端和DRM设备的文件描述符fd创建驱动\;
-    ...\;
-  }
-  \caption{gralloc初始化显卡驱动}
-  \label{algo:gralloc初始化显卡驱动}
-\end{algorithm}
-
-以bo\_create为例，首先初始化alloc\_args作为gbm后端调用的参数，根据输入的参数对width、height进行对齐处理，然后使用wrapper封装的gbm接口，使用gbm\_bo\_create创建
-一个新的缓冲区对象bo，以bo作为参数以此调用gbm\_bo\_get\_fd获取缓冲区对象的文件描述符、gbm\_bo\_get\_stride获取缓冲区对象的步长、gbm\_bo\_get\_modifier获取缓冲区对象的格式修饰符，
-并在上述步骤完成后因此此时可以通过文件描述符对缓冲区进行处理，因此销毁gbm缓冲区对象及时释放资源，如图\ref{fig:alloc过程}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{alloc过程.jpg}
-  \caption{alloc过程}
-  \label{fig:alloc过程}
-\end{figure}
-
-\begin{algorithm}[H]
-  \SetAlgoLined
-  \KwData{gralloc\_buffer\_descriptor，native\_handle\_t}
-  \KwResult{int32\_t}
-  allocate(){\\
-  DRM驱动初始化检查\;
-  ... \\
-  Hal格式与DRM格式检查\;
-  Driver->allocate\;  \tcp{调用驱动的allocate方法} 
-  句柄转换native\_handle\_t 转换成gralloc\_handle\_t\;
-  outHandle设置结果输出\;
-  }
-  \caption{allocate}
-  \label{algo:allocate}
-\end{algorithm}
-
-drmformat转换、回调框架说明、gralloc直通式等
-
-依据硬件的设计可以选择在初始化时是否使用tiled等模式进行访存优化，提供更灵活的驱动交互方式。
+% 依据硬件的设计可以选择在初始化时是否使用tiled等模式进行访存优化，提供更灵活的驱动交互方式。
 
 \subsection{硬件适应性修改}
 由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit, MMU）采用页式管理来处理 GPU 所使用的内存，
