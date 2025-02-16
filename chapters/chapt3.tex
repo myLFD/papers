@@ -437,6 +437,106 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 
 上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务（如SurfaceFlinger）等使用。
 
+\subsubsection{gallium实现及接口}
+当前Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Gallium3D 框架），另一部分是新的Gallium驱动。 
+经典驱动由于采用紧耦合架构设计，存在功能模块化程度较低的局限性，当需要适配新型图形接口标准（如Direct3D/Vulkan）时往往需要进行大量代码重构。
+为解决这一技术瓶颈，Gallium3D框架通过构建面向现代GPU硬件特性的通用抽象层，将图形API实现与硬件驱动解耦，使得不同图形接口可在统一架构基础上进行扩展开发。
+该框架特别将硬件适配层与操作系统交互模块进行分离设计，通过平台适配模块独立化实现了跨系统兼容能力，显著提升了驱动开发效率和可维护性。目前已经有许多
+驱动被移植到伽利略架构上了，包括nouveau（这个是面向NVIDIA的开源驱动），各种radeon驱动，以及一些软件驱动（swrast, llvmpipe）等。
+龙芯显卡正是在此架构上实现的。
+
+Gallium Winsys 框架 是 Gallium 驱动框架中的一部分，旨在抽象化硬件和操作系统的差异，提供一个统一的接口来管理底层硬件资源（如缓冲区、上下文、内存等）。
+它主要服务于图形硬件驱动和 GPU 资源管理，简化了不同平台之间的图形驱动开发。winsys中的关键操作包括缓冲区管理，内存映射，上下文管理，显示同步等。
+由于Android系统实际上是使用的linux内核，所以winsys层的实现还是依赖DRM来管理图形资源和显示。
+winsys缓冲区管理接口包括\ref{tab:winsys缓冲区管理接口表}
+
+\begin{table}[h]
+  \centering
+  \caption{winsys缓冲区管理接口表}
+  \label{tab:winsys缓冲区管理接口表}
+  \begin{tabular}{ll}
+    \toprule
+    接口名  & 函数名 \\
+    \midrule
+    buffer\_create & gsgpu\_bo\_create  \\
+    buffer\_map & gsgpu\_bo\_map \\
+    buffer\_unmap & gsgpu\_bo\_unmap \\
+    buffer\_wait & gsgpu\_bo\_wait \\
+    buffer\_set\_metadata & gsgpu\_buffer\_set\_metadata \\
+    buffer\_get\_metadata & gsgpu\_buffer\_get\_metadata \\
+    buffer\_from\_ptr & gsgpu\_bo\_from\_ptr \\
+    buffer\_from\_handle & gsgpu\_bo\_from\_handle \\
+    buffer\_get\_handle & gsgpu\_bo\_get\_handle \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+1.缓冲区对象（BO）管理：
+
+显式分配：
+
+如图\ref{fig:gsgpuBoCreate流程图}
+首先是参数校验，即在CPU不可访问下还创建VRAM缓冲对象，然后是根据gart\_page\_size对齐内存大小。为了复用缓冲区，避免重复分配内存，尝试从现有的缓冲区缓存池中
+获取一个已有的缓冲区。如果缓存未命中，则调用gsgpu\_create\_bo。
+gsgpu\_bo\_create首先在系统内存中分配缓冲区对象，并初始化缓存对象的缓存条目，构造缓冲区分配的请求结构，主要是为了区分申请的是VRAM内存还是GTT内存，
+之后通过gsgpu\_bo\_alloc(libdrm实现的接口)分配硬件缓冲区；若缓冲区分配成功，则调用gsgpu\_va\_range\_alloc分配虚拟地址空间并设置虚拟地址的内存标志；
+调用gsgpu\_bo\_va\_op\_raw映射虚拟地址；若映射成功，则使用缓冲区及相关字段如大小、对齐方式、使用方式、虚拟地址等初始化缓冲区对象，并更新VRAM/gtt的内存统计数据，返回缓冲区对象。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{gsgpuBoCreate流程图.jpg}
+  \caption{gsgpuBoCreate流程图}
+  \label{fig:gsgpuBoCreate流程图}
+\end{figure}
+
+外部导入：
+
+从共享句柄，为系统导入一个 GPU 缓冲区对象，从而实现对跨进程缓冲区的共享。首先是初始化缓冲区对象，并根据传入的handle句柄类型设置是共享句柄还是DMA缓冲区文件描述符，以设置缓冲区对象的句柄类型。
+而后调用gsgpu\_bo\_import导入缓冲区，通过传入的句柄获取缓冲区对象，使用gsgpu\_bo\_query\_info获取大小内存域等信息，并分配虚拟地址空间并映射到缓冲区，这里与显示分配中虚拟地址的分配类似。
+在确定缓冲区的初始内存域为VRAM或GTT后，初始化缓冲区对象的字段，并设置步幅和相应的偏移量，更新VRAM/gtt统计数据后返回缓冲区对象。
+用户内存映射：
+
+2.内存映射与同步：
+
+映射操作：
+
+BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更新顶点缓冲区等都需要保证数据的一致性。
+如图\ref{fig:gsgpuBoMap流程图}
+首先是同步检查与处理，如果没有同步的要求，则直接跳转CPU映射操作。如果需要同步访问，可分为阻塞模式和非阻塞模式，在非阻塞模式下，通过检查缓冲区是否被引用判断是否异步刷新命令流。
+这里在检查缓冲区引用状态时会稍有区别，当映射可读缓冲区时，若是缓冲区被GPU以读用处占用时，此时并不影响读取的结果，立即检查缓冲区是否可读，若是可读，则可以进行缓冲区的映射操作；
+若是缓冲区被GPU以写用处占用时，则会产生冲突需要完成同步操作。若是映射可写缓冲区时，由于写操作会影响缓冲区的读写结果，此时要求缓冲区完全空闲才可以进行缓冲区的映射。
+而在阻塞模式下，缓冲区检查与上文类似，但是由于是阻塞模式，会同步刷新命令流，并且在尝试避免忙等待之后会无限期等待缓冲区可读/写。
+在CPU映射操作中，会调用libdrm的gsgpu\_bo\_cpu\_map获取CPU的虚拟地址，
+若首次映射成功则及时更新mapped\_vram或mapped\_gtt的统计值，并返回映射地址，若失败则释放缓冲区中的所有缓存后重新尝试映射。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{gsgpuBoMap流程图.jpg}
+  \caption{gsgpuBoMap流程图}
+  \label{fig:gsgpuBoMap流程图}
+\end{figure}
+
+同步等待：
+
+同步操作就是等待GPU缓冲区完成当前的所有操作。需要确保缓冲区在某些条件下变为闲置或完成特定任务，如等待 GPU 操作结束，或者等待其他进程对缓冲区的操作完成。
+根据不同的输入参数（如超时时间、使用类型等）执行相应的等待操作。若超时时间为0,表示立即处理，在此情况下需要先检查缓冲区有无正在进行的IOCTL操作，如果有则表示异常。
+而缓冲区若是共享的话，是不能使用用户空间的栅栏（fence）的，需要调用gsgpu\_bo\_wait\_for\_idle等待缓冲区变为空闲之后返回。
+之后是等待fence的完成，在立即模式下（即超时时间为0），锁定fence数组，把已经完成的标记从数组里清理掉，更新数组长度；
+而若是阻塞模式（即有超时时间），则需要在锁定fence数组后，逐个解锁标记并等待完成，若是超时或者有新的标记添加就停止等待，循环直到所有标记清空或超时。
+
+3.跨进程共享：
+对应BO管理的外部导入功能。通过获取缓冲区对象的句柄，根据句柄类型赋值type，在调用gsgpu\_bo\_export会根据type执行不同的导出操作，并将句柄储存在输入的结构体中。
+之后会标记该缓冲区为共享缓冲区。
+
+% 4.元数据管理 
+
+% BO销毁流程：
+% 1. 解映射GPU VA（gsgpu_bo_va_op）
+% 2. 释放VA空间（gsgpu_va_range_free）
+% 3. 释放硬件缓冲区（gsgpu_bo_free）
+% 4. 清理围栏数组（gsgpu_bo_remove_fences）
+% 5. 更新内存统计（allocated_vram/gtt）
+
 \subsection{Android HAL层实现}
 
 \subsubsection{硬件混合渲染模块}
