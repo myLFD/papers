@@ -1,21 +1,43 @@
 % !TeX root = ../main.tex
 
 \chapter{性能分析与优化（安全性与稳定性分析）}
-bocreate 缓冲重用
+
+\section{测试环境搭建}
+由于AOSP仅源码就有130G之多，在完成编译之后达到212G，因此构建Android镜像需要一台构建机以及测试机。
+构建机需要充足的存储空间以及编译大量内容，所以选择核数多性能强的服务器，测试机是目标系统镜像的运行平台。
+
+构建机：在构建安卓内核、镜像，以及编译loonggpu核模块都使用的是龙芯公司的X86服务器(所以所有项目都是交叉编译)，Xeon Gold 6388处理器，核数
+为128核。
+
+构建环境配置：
+    AOSP镜像构建：AOSP配置环境使用预先编译好的llvm15的编译器（这些前期已完成），通过AOSP项目提供的envsetup.sh脚本设置基本的环境变量，并lunch loongarch-3A5000选择构建目标，
+        设置特有的环境变量。编译上可以选择使用m编译全平台代码，mm编译某模块代码及其依赖或者使用mmm编译某个指定路径下的所有路径及其依赖。
+    Android内核构建：编译工具链使用loongson\ gnu\ toolchain 8.3，使用自写脚本设置交叉编译环境变量，主要是PATH、LD\_LIBRARY\_PATH、CROSS\_COMPILE、ARCH等变量的指定，
+        最后使用make编译，可以使用-j(\$proc)添加编译核心数。
+    核模块构建：构建与内核编译类似，设置交叉编译环境后使用make即可编译。
+
+测试机：运行主机是LoongArch64结构，使用龙芯的3A5000CPU，配备7A2000桥片。桥片上集成了LG110显卡，该显卡所使用的固件需要在
+% bocreate 缓冲重用
 % pb_cache_bucket = gsgpu_get_heap_index(domain, flags);
-\section{启动时间优化}
 
-\section{PAGE\_SIZE调整带来的影响评估}
 
-\section{性能分析}
+\section{功能测试}
 
-\section{兼容性测试}
+\section{性能测试}
 
-\subsection{surfaceflinger关键流程分析}
+% \section{启动时间优化}
 
-\subsection{性能分析软硬件环境和方法} gtestopengl 测试套件
+% \section{PAGE\_SIZE调整带来的影响评估}
 
-\subsection{结论}
+% \section{性能分析}
 
-\section{？？？}
+% \section{兼容性测试}
+
+% \subsection{surfaceflinger关键流程分析}
+
+% \subsection{性能分析软硬件环境和方法} gtestopengl 测试套件
+
+% \subsection{结论}
+
+% \section{？？？}
 

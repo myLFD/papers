@@ -47,13 +47,13 @@ Android的图形系统作为安卓最复杂的模块之一，在开始移植的�
 \subsection{安卓图形系统的整体构成}
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{安卓图形栈结构图.jpg}
-  \caption{安卓图形栈结构图}    
-  \label{fig:安卓图形栈结构图}
+  \includegraphics[width=0.8\textwidth]{图形栈总体结构图.jpg}
+  \caption{图形栈总体结构图}    
+  \label{fig:图形栈总体结构图}
 \end{figure}
 自上往下分析，Android应用、活动管理器（Activity Manager）、窗口管理器（Window Manager）以及部分安卓Native程序（如BootAnimation）等首先与Surface进行交互，
 根据自己的需求创建一个Surface,然后数个Surface会被SurfaceFlinger进行混合\cite{邓凡平2011深入理解}。
-因此图形系统中最关键的服务进程就是SurfaceFlinger,负责管理图形缓冲区的合成与显示，如图\ref{fig:安卓图形栈结构图}所示，它将来自不同应用的图形缓冲区进行合成，
+因此图形系统中最关键的服务进程就是SurfaceFlinger,负责管理图形缓冲区的合成与显示，如图\ref{fig:图形栈总体结构图}所示，它将来自不同应用的图形缓冲区进行合成，
 并将合成结果发送到显示设备。因此，图形系统的正确运行一个重要的环节就是确保SurfaceFlinger的正确运行。而SurfaceFlinger的运行依赖于硬件抽象层（HAL）和底层图形库。
 这其中有两个重要的模块，一个是HWC（硬件混合渲染器），是进行窗口合成和显示HAL层模块，其实现是特定于设备的，通常是由显示设备制造商 (OEM)完成。其用于合成从Surfaceflinger接收
 的图层，从而减少OpenGL ES (GLES) 和 GPU 执行的合成量。但是实际上由于LG110并不是专门为安卓平台设计的显卡，并没有实现硬件图层混合的功能，因此hwcomposer使用的是client合成模式，
@@ -78,12 +78,7 @@ Mapper负责将已分配的缓冲区映射到进程的虚拟地址空间。本�
 SurfaceFlinger是通过HWC（Hardware Composer）与DRM/KMS交互，HWC负责将图形缓冲区合成任务委托给硬件。在 DRM/KMS 框架下，HWC 通过 DRM 接口与内核通信，
 管理显示模式设置、缓冲区分配和显示同步等任务。KMS 负责配置显示控制器和显示设备的分辨率、刷新率等参数，而 DRM 则管理图形缓冲区的分配与渲染。
 
-\subsection{关键流程分析}
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.35\textwidth]{skia_create过程.jpg}
-  \caption{skiaRenderEngine创建时初始化EGL流程图}
-\end{figure}
+\subsection{SurfaceFlinger初始化过程分析}
 
 Android 2D渲染引擎默认使用的是skia，在SurfaceFlinger初始化过程中，会创建一个线程专门用于skia引擎的初始化并用于后续的图形绘制，
 因此surfaceflinger初始化过程的关键是skia引擎的初始化。在SkiaGLRenderEngine::create时，
@@ -93,16 +88,10 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 
 下面以eglInitialize为例，说明surfaceflinger是如何通过安卓的framework层的接口调用龙芯用户态驱动程序的。
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{flinger_egl初始化示意图.jpg}
-  \caption{flinger驱动调用函数栈}
-\end{figure}
-
 首先是surfaceflinger初始化，调用flinger->init函数，根据PROPERTY\_DEBUG\_RENDERENGINE\_BACKEND宏判断使用渲染引擎的类型，可以是GLESRenderEngine
 或SkiaGLRenderEngine，安卓中一般默认的都是SkiaGLRenderEngine,然后是引擎的create。调用eglInitialize,会使用LayerLoader::LoadLayers
 中dlopen加载的libGLES\_mesa.so去初始化修饰的egl\_connection\_t结构体，调用gEGLImpl的接口，从而实现对龙芯用户态显卡驱动的调用。
-GPU驱动的加载在Surfaceflinger的初始化过程中skia（2D渲染引擎）创建时进行加载，根据设置的驱动加载方式（本文使用的是dri2）
+GPU驱动的加载在Surfaceflinger的初始化过程中skia创建时进行加载，根据设置的驱动加载方式（本文使用的是dri2）
 在eglInitialize时通过eglApi的接口调用mesa中的eglInitialize函数dri2\_initialize，从而实现mesa驱动的加载和初始化。
 
 \section{龙芯安卓图形系统详细方案}
@@ -112,14 +101,9 @@ GPU驱动的加载在Surfaceflinger的初始化过程中skia（2D渲染引擎）
 很大程度上解决这个问题，该项目使用Mesa作为OpenGL ES实现，基于DRM和GEM实现了gralloc.drm.so模块，成功的使SurfaceFlinger在x86架构下运行并实现硬件加速\cite{XTYY201710015}。
 但是Android自Q版本开始，为了提供图形性能和增强对硬件的支持，
 对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，在实现gralloc和HWC时需要考虑API的兼容性。具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和
-HWC2,由于龙芯硬件的限制，HWC实际上使用的是hwcomposer1.0的实现，便不做过多讨论。以下将从mesa,HWC,gralloc简要说明需要完成的任务。
+HWC2。以下将从内核驱动、用户态驱动、Android HAL层实现以及系统镜像定制等4个部分说明设计方案。
 
 \subsection{内核驱动}
-
-% \subsubsection{命令流管理模块}
-% \subsubsection{显示控制模块}
-% \subsubsection{转换表映射模块}
-\subsubsection{缓冲区对象管理模块}
 
 % 转换表映射模块：
 % TTM(Translation Table Manager)适用于GPU内存管理的一部分，提供了对显存（VRAM）、主存、共享内存等不同类型内存的管理功能。
@@ -131,9 +115,9 @@ HWC2,由于龙芯硬件的限制，HWC实际上使用的是hwcomposer1.0的实�
 %   \caption{TTM主要对象}
 % \end{figure}
 
-2.ioctl设计实现
+\subsubsection{ioctl设计实现}
 
-在 Linux 驱动程序中，除了基本的设备读写操作（即 读取 和 写入 数据）外，设备驱动程序还需要支持对设备执行各种 控制操作。
+在 Linux 驱动程序中，除了基本的设备读写操作（即读取和写入数据）外，设备驱动程序还需要支持对设备执行各种控制操作。
 这些控制操作通常是通过 ioctl（Input/Output Control）机制来实现的，它提供了一种用户空间和内核空间之间进行特定设备操作交互的方式。
 IOCTL 可以用于实现设备驱动的各种功能，包括配置设备、读取设备状态、传输数据、控制设备行为等， 而这些具体的功能需要在驱动程序中实现。
 在DRM框架中，libdrm是沟通和连接内核空间和用户空间的重要一环。它通过对多种ioctl底层接口进行封装，以向上提供通用的接口。用户空间的驱动可以通过
@@ -170,6 +154,7 @@ linux内核中，ioctl的命令码的结构是一个32位的整数，由四个�
 在课题场景下，需要将内核调用的结果返回，因此使用双向的数据传输作为基础，实现GSGPU的ioctl。
 为了给用户态程序提供创建和管理 GEM（图形内存对象）到处理上下文、命令流、内存映射、调度等支持，定义了如下ioctl命令码：
 
+
 \begin{table}[h]  
   \centering
   \caption{IOCTL命令码}
@@ -203,6 +188,8 @@ linux内核中，ioctl的命令码的结构是一个32位的整数，由四个�
     BASE=DRM\_COMMAND\_BASE
   }
 \end{table}
+
+% #define DRM_IOWR(nr,type)           _IOWR(DRM_IOCTL_BASE,nr,type)
 
 % DRM_IOCTL_DEF_DRV(GSGPU_GEM_CREATE, gsgpu_gem_create_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
 %         DRM_IOCTL_DEF_DRV(GSGPU_CTX, gsgpu_ctx_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
@@ -352,13 +339,13 @@ BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更
 
 \subsubsection{硬件混合渲染模块}
 %每个厂商hwc实现可能不同如nxp，rockchip，drm-hwc，ranchu，也有很多厂商实现是闭源的如nxp，而谷歌的drm-hwc，ranchu是开源的
-Google从OREO（Android8）开始强制要求设备实现 HWC 2.x 及以上版本,但是由于龙芯目前的硬件不支持HWComposer，因此hwcomposer.loongarch.so只是一个符合
-HWComposer1.0接口标准的软件实现，并不是硬件HWComposer的驱动程序。
-SurfaceFlinger的画面合成过程实际上是基于OpenGL ES完成的，是使用client模式合成，也就是使用renderengine（课题使用的是支持了龙芯驱动的skia渲染引擎）合成。
-这里的client合成实际上是相对于HWC硬件合成而言的，其合成方式是将layer的内容用GPU渲染到缓冲区，然后由缓冲区送显到显示控制器。
 
-它在进行画面更新时实际上会先atomic设置plane的状态，实际上就是调用libdrm的drmModeAtomicAddProperty接口，用于设置显示设备的相关属性，然后atomic向
-底层drm系统提交显示信息，也就是调用libdrm的drmModeAtomicCommit接口，更改显示设备的配置。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{HWC模块结构.jpg}
+  \caption{HWC模块结构}
+  \label{fig:HWC模块结构}
+\end{figure}
 
 主要模块及实现细节：
 
@@ -401,8 +388,9 @@ SurfaceFlinger的画面合成过程实际上是基于OpenGL ES完成的，是使
 
 实现细节：
 
-1.设备初始化
-hwcomposer的初始化主要是DRM设备的初始化，需要先打开/dev/dri/card*设备文件，使用drmSetClientCap方法设置DRM客户端能力标志，用于支持通过统一的接口访问和管理所有类型的显示平面，
+1.设备注册与初始化
+这一部分的内容主要是DRM管理模块完成，在创建hwcomposer回调时，首先完成对DRM设备资源的初始化，，需要先打开/dev/dri/card*设备文件，
+使用drmSetClientCap方法设置DRM客户端能力标志，用于支持通过统一的接口访问和管理所有类型的显示平面，
 并启用和指示图形硬件支持原子操作，使用drmGetCap方法检查是否支持framebuffer 修饰符功能。随后获取DRM设备的主控制权，使用drmModeGetResources方法获取DRM设备的资源，
 如CRTCs（显示控制器），encoders（编码器），connectors（连接器）并初始化,显示控制器和编码器初始化较为简单，其实就是分别调用drmModeCrtc、drmModeEncoder并储存返回的
 指针。而连接器则需要在使用drmModeConnector获取链接器资源后，检查连接器的DPMS（显示电源管理信号）和CRTC\_ID(显示控制器id)是否正常，EDID（扩展显示识别数据）获取显示设备的能力。
@@ -410,11 +398,16 @@ hwcomposer的初始化主要是DRM设备的初始化，需要先打开/dev/dri/c
 随后使用drmModePlaneRes获取所有的平面(plane),在初始化时获取平面类型（OVERLAY、PRIMARY、CURSOR），并获取一些与显示控制器、帧缓冲、坐标、大小等相关的设置。事实上，由于龙芯
 目前的硬件仅支持PRIMARY和CURSOR平面类型，较为简易，在此不再赘述。若上述过程都无异常则初始化成功完成。
 
-2.显示输出设备管理
-
-3.验证与显示
-实际上，hwcomposer的客户端调用是在SurfaceFlinger中，通过显示钩子函数实现对服务端具体功能的调用,以ValidateDisplay为例，从上层传递下来的请求最终会调用Backend中实现的具体功能。
-
+2.验证与显示
+实际上，hwcomposer的客户端调用是在SurfaceFlinger中，通过显示钩子函数实现对服务端具体功能的调用。
+由于龙芯目前的硬件不支持硬件混合渲染，所以SurfaceFlinger的画面合成过程实际上是基于OpenGL ES完成的，是使用client模式合成，仅使用了HWComposer1.0接口标准的软件实现
+也就是使用renderengine（课题使用的是支持了龙芯驱动的skia渲染引擎）合成。
+这里的client合成是相对于HWC硬件合成而言的，其合成方式是将layer的内容用GPU渲染到缓冲区，然后由缓冲区送显到显示控制器。
+其基本过程是首先获取显示设备支持的所有layer，并判断是否支持上层的需求，随后使用CreateComposition尝试创建合成（事实上在后续present送显时也是调用这个函数）,若创建成功则更新
+像素操作数等统计信息并返回结果。
+在CreateComposition时，会初始化渲染管道pipe,按照zpos排列图层并导入帧缓冲区，为图层创建DrmKms计划，并进行画面更新。
+它在进行画面更新时实际上会先atomic设置plane的状态，就是调用libdrm的drmModeAtomicAddProperty接口，用于设置显示设备的相关属性，然后atomic向
+底层drm系统提交显示信息，也就是调用libdrm的drmModeAtomicCommit接口，更改显示设备的配置，以完成送显的操作。
 
 % 1.HWC合成周期
 % \begin{figure}[h]
@@ -567,10 +560,13 @@ alloc方法进行缓冲区的分配。之后需要初始化缓冲区布局，为
 \begin{equation}
   stride=(stride+stride\_align-1)\&~(stride\_align-1)
 \end{equation}
+
 大小需要步幅乘以平面高度与该平面的垂直子采样因子向上取整。vertical\_subsampling是该平面的垂直子采样因子，表示该平面的高度相对于原始图像高度的缩放比例。
+
 \begin{equation}
   size=((height+vertical\_subsampling-1)/vertical\_subsampling)*stride
 \end{equation}
+
 偏移量则是随着对于平面的循环，依次加上大小计算而来。
 
 实际上，由于龙芯目前硬件支持的图形库较为有限，目前使用的硬件平台LG110图层仅支持primary和cursor格式，而不支持layout格式，图像格式上仅支持DRM\_FORMAT\_RGB565,DRM\_FORMAT\_RGB888,
@@ -582,12 +578,12 @@ DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888
 并在上述步骤完成后可以通过文件描述符对缓冲区进行处理，因此销毁gbm缓冲区对象及时释放资源，如图\ref{fig:alloc过程}。gbm中的缓冲区创建等实现实际上是基于直接渲染架构DRI,在创建dri device时，
 会搜索目标路径下的所有驱动（本课题使用的是gallium框架实现的驱动）并加载。具体实现会在用户态驱动实现中说明。
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{alloc过程.jpg}
-  \caption{alloc过程}
-  \label{fig:alloc过程}
-\end{figure}
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{alloc过程.jpg}
+%   \caption{alloc过程}
+%   \label{fig:alloc过程}
+% \end{figure}
 
 % \begin{algorithm}[H]
 %   \SetAlgoLined

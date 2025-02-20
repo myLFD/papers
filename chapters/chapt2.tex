@@ -1,9 +1,6 @@
 % !TeX root = ../main.tex
 
 \chapter{相关技术}
-1.主流图形系统结构，x，waylnd
-2.龙芯固件，硬件
-3.aosp必要的框架介绍
 
 \section{AOSP project}
 
@@ -145,9 +142,91 @@ TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView �
 并根据 View 状态指示在需要渲染的位置和方式进行渲染。由于 View 合成始终通过 GLES 执行，
 这意味着内容的更新可能导致其他 View 元素的重绘，从而确保了 UI 的一致性和动态性。
 
+\section{安卓图形编程接口}
+在 Android 上，图形编程接口（Graphics API）提供了与硬件图形加速进行交互的方式。
+Android 提供了多个图形编程接口，允许开发者在设备上执行各种图形和渲染任务，如用户界面渲染、游戏图形渲染、视频解码和图像处理。
+目前常见的图形编程接口有OpenGL ES、Vulkan、OpenCL、Android Canvas、Skia、SurfaceFlinger等。
+OpenGL ES 是一个用于嵌入式设备（如智能手机、平板、嵌入式设备等）的图形渲染 API，它是 OpenGL 的简化版。OpenGL ES 主要用于 2D 和 3D 图形渲染，在 Android 上被广泛使用。
+在 Android 中，应用程序通过 GLSurfaceView（一个用于渲染 OpenGL 内容的视图）或 EGL（EGL 用于创建 OpenGL 上下文和管理图形缓冲区）来与 OpenGL ES 进行交互。
+Vulkan 是一种现代的低开销、高性能的图形和计算 API，它提供了对硬件的直接控制，相比 OpenGL ES，它提供了更细粒度的控制、更高的性能以及更低的 CPU 和 GPU 开销。
+在 Android 上，Vulkan 需要设备支持，并且开发者需要通过 Vulkan API 来进行图形和计算任务。与 OpenGL ES 相比，Vulkan 的编程模型更复杂，但它提供了更高的性能和更灵活的图形管线。
+OpenCL 是一个开源的框架，主要用于并行计算。它允许开发者在 CPU、GPU 和其他处理器上执行计算任务，广泛用于图形计算之外的任务，如图像处理、机器学习和科学计算。
+虽然 OpenCL 在 Android 中的使用较少，但它在需要大量计算任务的图形应用和其他计算密集型应用中仍然非常有用。
+Canvas 是 Android 中用于 2D 图形渲染的高级 API。它封装了对 OpenGL 的调用，提供了一组简单的接口，用于绘制文本、图形、位图等。Canvas 主要用于应用程序的用户界面（UI）绘制。
+Skia 是 Android 中的 2D 图形库，负责图形渲染操作，尤其是为用户界面提供支持。Skia 库支持 2D 图形、文本渲染、图像缩放、透明度和颜色操作等功能。
+SurfaceFlinger 是 Android 的图形合成器，负责将应用程序的图层（如活动窗口、动画等）组合成最终的显示图像。SurfaceFlinger 是 Android 图形架构中的一个核心组件，它使用 GPU 来加速图形合成。
 
-\section{龙芯平台支持}
-\subsection{GPU硬件}
-渲染管线、pipectrl,drm,x11,wayland比较
-\subsection{固件}
-来不及写了。。。
+\section{GPU软件栈}
+\subsection{核模块}
+核模块 是一种内核功能扩展机制，允许将某些功能以模块的形式动态加载到操作系统的内核中。它的设计目的是增强内核的灵活性和可扩展性，使得内核在不需要重新编译或重启的情况下能够扩展和更新。
+模块通过特定的接口与内核进行交互，可以动态地扩展内核的功能，而无需重新启动系统。通过内核的模块化设计，可以根据需求加载、卸载、更新不同的功能模块。
+核模块的优点有：动态加载和卸载，模块不需要在系统启动时加载，而是在需要时按需加载，并可以在不需要时卸载，同时可以减少内存占用，增强了灵活性，不影响其他部分的功能。
+
+没有模块的话，就必须得把所有实现新功能的函数都编译到内核，这种内核也叫单内核（monolithic kernels）。
+单内核是一种将所有内核功能编译为一个统一的内核映像的方式，其中包括设备驱动、文件系统、网络协议栈等所有内核组件。
+由于所有的功能都被编译到内核中，因此，任何功能的增加或修改都需要重新编译内核并重启操作系统。
+
+内核模块可以根据功能的不同分为多个类型，最常见的类型包括：设备驱动模块、文件系统模块、网络协议模块、内存管理模块、安全和监控模块。
+设备驱动是最常见的内核模块之一，允许操作系统通过内核访问和控制硬件设备。
+文件系统模块允许内核支持不同类型的文件系统，如NTFS、ext4、FAT等。
+网络协议模块用于实现网络协议栈的一部分，支持不同的网络协议（如 TCP/IP、UDP 等）。
+内存管理模块用于管理系统的内存分配和回收。
+而安全和监控模块用于系统安全、身份验证、访问控制和资源监控的功能模块
+
+\subsection{MESA}
+mesa\cite{mesa3d}是由Brian Paul于1993年8月发起的一个开源图形API软件实现，提供了一整套图形库和驱动程序，允许开发者使用标准的图形 API（如OpenGL,OpenGL ES，Vulkan等）
+来进行图形渲染，而无需直接依赖硬件制造商的专有驱动程序，现由freedesktop维护并被广泛采用。
+由于其本身的设计初衷就是为了提供硬件无关的图形渲染能力，所以mesa是一个跨平台跨操作系统的图形库，
+可以为多个硬件平台提供支持，包括intel、amd、Nvidia等驱动均在mesa上有相关的开源实现，操作系统上支持Android、Linux、BSD 系统等。
+其中有多个核心组件：
+
+1.驱动框架：
+Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Gallium3D 框架），另一部分是新的Gallium驱动。
+经典的Mesa驱动是紧耦合的，这意味着要在现有驱动基础上实现一个其它的API规范几乎要重写这个驱动，而Gallium3D实现一套暴露现代GPU的硬件功能的API，将依赖潜在操作系统的部分分隔开来，
+使得可以支持各种操作系统。如图\ref{fig:mesa驱动结构图}。在经典结构中，应用程序（APP）通过 DRI驱动程序与图形硬件进行交互，DRI 驱动程序直接管理硬件，并通过 DRM与与显示硬件进行通信。
+而在Gallium 3D 结构中，有State Tracker是mesa核心和Gallium3D的接口，负责将MESA状态（混合模式，纹理状态等）和绘制命令（例如Gldrawarrays和gldrawpixels）转换为管道对象和操作
+而HW driver是GPU硬件的驱动，负责将上层的状态、纹理等翻译成GPU硬件可以识别的信息，而Winsys提供了与内核交互的接口，准确来说也是使用libdrm的接口，实现对操作系统的支持。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{mesa驱动结构图.jpg}
+  \caption{mesa驱动结构图}
+  \label{fig:mesa驱动结构图}
+\end{figure}
+
+2.OpenGL 实现：
+libGL：libGL 是 Mesa 提供的 OpenGL 实现库。它实现了标准 OpenGL（包括 OpenGL 1.x 和 2.x）的功能，并且支持通过 Gallium 框架的硬件加速功能，支持多种硬件平台。
+libGLESv2：libGLESv2是OpenGL ES 2.0 功能的实现，专为嵌入式系统和移动设备设计，广泛用于 Android 和其他嵌入式平台。
+libGLESv1\_CM是OpenGL ES 1.x 功能的实现，较为过时，现在已经较少使用。这些库都通过 Gallium 框架实现硬件加速和软件渲染
+
+3.GBM（Generic Buffer Manager） 是 Mesa 提供的一个内存管理库，它允许图形应用程序高效地创建、管理和共享显存缓冲区（通常是帧缓冲区）。
+在图形渲染中，帧缓冲区是存储图像数据的内存区域，通常用于保存渲染的图像，以便将其显示在屏幕上。其主要用于跨平台缓冲区管理、显存管理以及兼容其他图形系统。
+其核心功能包括缓冲区的创建、共享与映射等，其与EGL进行了集成，允许将创建的缓冲区直接与 EGL 渲染上下文绑定，从而为使用GPU进行渲染提供了支持。
+
+\subsection{libdrm}
+libdrm（Direct Rendering Manager Library）是一个提供对 Linux 内核中 Direct Rendering Manager (DRM) 子系统接口的库，
+为图形驱动程序和用户空间应用程序提供了与图形硬件的直接交互接口，允许应用程序和驱动程序在不依赖显示服务器的情况下直接访问图形硬件。
+它使用ioctl底层接口封装对内核 DRM 接口的调用，为用户空间应用提供对 DRM 子系统的访问接口，概括来说是一个与硬件无关的抽象，使得不同硬件平台的开发者可以统一地访问和控制硬件资源。
+
+\subsection{DRM} 
+DRM框架（Direct Rendering Manager） 是Linux内核中用于管理图形硬件的核心子系统，主要解决用户态程序（如OpenGL、Vulkan应用）直接访问GPU的问题，同时确保多进程环境下的资源安全和硬件抽象。
+从模块上看，DRM可以分为三部分libdrm、KMS、GEM。其中libdrm前文已提及，KMS和GEM位于内核空间。
+
+KMS（Kernel Mode Setting） 内核显示模式设设置，是通过内核来设置和管理显示设备的模式（如分辨率、刷新率、颜色深度等）。
+KMS 允许操作系统直接控制显示硬件，减少了用户空间与显示设备之间的中间层，提供了更高效、更灵活的显示控制。显示控制过程如图\ref{fig:DRM显示控制}
+
+GEM（Graphics Execution Manager）是图形缓冲区管理模块，为操作系统和用户空间应用程序提供高效的显存管理功能，实现的功能有缓冲区分配、映射、销毁、交换等，
+
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{DRM显示控制.jpg}
+  \caption{DRM显示控制}
+  \label{fig:DRM显示控制}
+\end{figure}
+
+% \section{龙芯平台支持}
+% \subsection{GPU硬件}
+% 渲染管线、pipectrl,drm,x11,wayland比较
+% \subsection{固件}
+% 来不及写了。。。
