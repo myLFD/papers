@@ -872,9 +872,11 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 
 % \subsection{内核编译\&bionic\&部分系统服务修改说明}
 
-\textbf{内核编译}:本课题所使用的内核是安卓通用内核5.10,因此在编译时需要添加安卓特性相关的驱动支持如ASHMEM、BINDERFS、BINDERIPC等，
-虚拟内存管理使用三级页表，页表大小为16Kb。将f2fs模块的相关的宏定义做适应性调整。
+\textbf{内核定制说明}:本课题所使用的内核是安卓通用内核5.10,因此在编译时需要添加安卓特性相关的驱动支持如ASHMEM、BINDERFS、BINDERIPC等。
+考虑到需要实现对龙芯显卡的支持，在内核编译时需要将loonggpu/lg100\_cp.bin通过CONFIG\_EXTRA\_FIRMWARE选项指定并使用CONFIG\_EXTRA\_FIRMWARE\_DIR指定固件所在的
+位置。由于LG110硬件设计上的限制，因此虚拟内存管理智能使用三级页表，页表大小为16Kb。现需要将内核部分模块做硬件适应性修改，如f2fs模块等，
 详见表\ref{tab:f2fs模块修改说明}。以此为基础，对f2fs模块中所有依赖这几个宏的相关实现进行修改。
+
 \begin{table}[h]
   \centering
   \caption{f2fs模块修改说明}
@@ -915,7 +917,7 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.8\textwidth]{androidS 16k适配改动图.jpg}
-  \caption{androidS 16k适配改动图}
+  \caption{龙芯androidS 16k适配改动图}
   \label{fig:androidS 16k适配改动图}
 \end{figure}
 
