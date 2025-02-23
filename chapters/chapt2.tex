@@ -70,6 +70,30 @@ Android 应用能够更流畅地运行。
 4.原生开发支持：Bionic 支持 Android 的原生开发工具（NDK），允许开发者在 C 和 C++ 中编写高性能代码。
 这对于需要直接与硬件交互或执行计算密集型任务的应用尤为重要。
 
+\subsection{AOSP源码树结构介绍}
+AOSP源码树的核心包含以下几个部分：
+
+  art/: 是Android Runtime（一种App运行模式，区别于传统的Dalvik虚拟机，旨在提高Android系统的流畅性）的实现目录，包含了art库实现、dex格式转换、
+  命令行工具、编译套件、测试程序等一系列组件。
+
+  bionic/: Android的C库实现源码，是Android实现的核心组件。
+
+  frameworks/: Android框架层核心代码的实现，是Android系统的核心部分，主要是由Java和C++编写
+
+  system/：Android系统底层服务的实现，实现了一些核心的工具、调试工具、安全机制以及存储管理相关的功能。
+
+  hardware/：主要是硬件抽象层的代码，包括一些旧版的HAL实现，HAL接口以及一些硬件库相关的模块。
+
+  device/：设备厂商适配实现，主要是设备配置相关，本课题实现了LoongArch架构下的硬件配置。
+
+  packages/：系统应用和服务的实现，包括一些核心应用程序以及第三方应用程序等，可视情况加以定制和修改
+
+  external/：Android中使用的外部开源库。
+
+  本文的工作集中在frameworks、device、external这几个目录下，以下几个是关键部分：
+
+  
+
 \subsection{Android图形协议}
 Android 的图形协议是为移动设备特别设计的，包含了多个组件，如 SurfaceFlinger、Hardware Composer 
 和各种图形库（如 OpenGL ES 和 Vulkan）。其设计理念主要体现在以下几个方面：
