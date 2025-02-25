@@ -78,7 +78,7 @@ Mapper负责将已分配的缓冲区映射到进程的虚拟地址空间。本�
 SurfaceFlinger是通过HWC（Hardware Composer）与DRM/KMS交互，HWC负责将图形缓冲区合成任务委托给硬件。在 DRM/KMS 框架下，HWC 通过 DRM 接口与内核通信，
 管理显示模式设置、缓冲区分配和显示同步等任务。KMS 负责配置显示控制器和显示设备的分辨率、刷新率等参数，而 DRM 则管理图形缓冲区的分配与渲染。
 
-\subsection{SurfaceFlinger初始化过程分析}
+\subsection{渲染引擎后端支持龙芯GPU}
 
 Android 2D渲染引擎默认使用的是skia，在SurfaceFlinger初始化过程中，会创建一个线程专门用于skia引擎的初始化并用于后续的图形绘制，
 因此surfaceflinger初始化过程的关键是skia引擎的初始化。在SkiaGLRenderEngine::create时，
@@ -94,7 +94,7 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 GPU驱动的加载在Surfaceflinger的初始化过程中skia创建时进行加载，根据设置的驱动加载方式（本文使用的是dri2）
 在eglInitialize时通过eglApi的接口调用mesa中的eglInitialize函数dri2\_initialize，从而实现mesa驱动的加载和初始化。
 
-\section{龙芯安卓图形系统详细方案}
+\subsection{龙芯安卓图形栈方案}
 安卓使用的图形协议是深度定制的，而x11,wayland协议是运行在传统linux内核下的协议，因此龙芯现有的图形栈解决方案在安卓上并不完全适用。
 并且由于Android多应用于ARM架构，而ARM与LoongArch架构的图形系统有较大差异，具体表现为ARM架构下的GPU没有独立显存\cite{Inki}，而在LoongArch的内核中，需要
 使用DRI框架来调用GPU，并且GPU有自己的独立显存。因此，首先需要解决的是在LoongArch架构下，Android系统中显存和系统内存分配映射的问题。AndroidX86\cite{AndroidX86}
@@ -103,7 +103,7 @@ GPU驱动的加载在Surfaceflinger的初始化过程中skia创建时进行加�
 对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，在实现gralloc和HWC时需要考虑API的兼容性。具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和
 HWC2。以下将从内核驱动、用户态驱动、Android HAL层实现以及系统镜像定制等4个部分说明设计方案。
 
-\subsection{内核驱动}
+\section{内核驱动}
 
 % 转换表映射模块：
 % TTM(Translation Table Manager)适用于GPU内存管理的一部分，提供了对显存（VRAM）、主存、共享内存等不同类型内存的管理功能。
@@ -115,7 +115,7 @@ HWC2。以下将从内核驱动、用户态驱动、Android HAL层实现以及�
 %   \caption{TTM主要对象}
 % \end{figure}
 
-\subsubsection{ioctl设计实现}
+\subsection{ioctl设计实现}
 
 在 Linux 驱动程序中，除了基本的设备读写操作（即读取和写入数据）外，设备驱动程序还需要支持对设备执行各种控制操作。
 这些控制操作通常是通过 ioctl（Input/Output Control）机制来实现的，它提供了一种用户空间和内核空间之间进行特定设备操作交互的方式。
@@ -210,7 +210,7 @@ linux内核中，ioctl的命令码的结构是一个32位的整数，由四个�
 %         DRM_IOCTL_DEF_DRV(GSGPU_GEM_USERPTR, gsgpu_gem_userptr_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
 %         DRM_IOCTL_DEF_DRV(GSGPU_HWSEMA_OP, gsgpu_hw_sema_op_ioctl, DRM_AUTH|DRM_RENDER_ALLOW)
 
-\subsection{用户态驱动}
+\section{用户态驱动}
 
 % \subsubsection{图形 API 支持}
 % 打通GPGPU后端支持Gallium3D的通路，确保 OpenGL 的核心功能集成到龙芯平台，确保API 的正确性。
@@ -219,7 +219,7 @@ linux内核中，ioctl的命令码的结构是一个32位的整数，由四个�
 % 针对龙芯架构的特点，优化 Mesa 的编译选项以提升性能。
 % 针对 Gallium3D 后端渲染效率的优化，包括批处理、资源管理和 API 调用路径。
 
-\subsubsection{gallium实现及接口}
+\subsection{gallium实现及接口}
 当前Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Gallium3D 框架），另一部分是新的Gallium驱动。 
 经典驱动由于采用紧耦合架构设计，存在功能模块化程度较低的局限性，当需要适配新型图形接口标准（如Direct3D/Vulkan）时往往需要进行大量代码重构。
 为解决这一技术瓶颈，Gallium3D框架通过构建面向现代GPU硬件特性的通用抽象层，将图形API实现与硬件驱动解耦，使得不同图形接口可在统一架构基础上进行扩展开发。
@@ -254,7 +254,7 @@ winsys缓冲区管理接口包括\ref{tab:winsys缓冲区管理接口表}
   \note{}
 \end{table}
 
-\subsubsection{缓冲区对象（BO）管理}
+\subsection{缓冲区对象（BO）管理}
 
 LG110内存模型分析：
 
@@ -335,9 +335,9 @@ BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更
 % 4. 清理围栏数组（gsgpu_bo_remove_fences）
 % 5. 更新内存统计（allocated_vram/gtt）
 
-\subsection{Android HAL层实现}
+\section{Android HAL层实现}
 
-\subsubsection{硬件混合渲染模块}
+\subsection{硬件混合渲染模块}
 %每个厂商hwc实现可能不同如nxp，rockchip，drm-hwc，ranchu，也有很多厂商实现是闭源的如nxp，而谷歌的drm-hwc，ranchu是开源的
 
 \begin{figure}[h]
@@ -389,6 +389,7 @@ BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更
 实现细节：
 
 1.设备注册与初始化
+
 这一部分的内容主要是DRM管理模块完成，在创建hwcomposer回调时，首先完成对DRM设备资源的初始化，，需要先打开/dev/dri/card*设备文件，
 使用drmSetClientCap方法设置DRM客户端能力标志，用于支持通过统一的接口访问和管理所有类型的显示平面，
 并启用和指示图形硬件支持原子操作，使用drmGetCap方法检查是否支持framebuffer 修饰符功能。随后获取DRM设备的主控制权，使用drmModeGetResources方法获取DRM设备的资源，
@@ -399,6 +400,7 @@ BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更
 目前的硬件仅支持PRIMARY和CURSOR平面类型，较为简易，在此不再赘述。若上述过程都无异常则初始化成功完成。
 
 2.验证与显示
+
 实际上，hwcomposer的客户端调用是在SurfaceFlinger中，通过显示钩子函数实现对服务端具体功能的调用。
 由于龙芯目前的硬件不支持硬件混合渲染，所以SurfaceFlinger的画面合成过程实际上是基于OpenGL ES完成的，是使用client模式合成，仅使用了HWComposer1.0接口标准的软件实现
 也就是使用renderengine（课题使用的是支持了龙芯驱动的skia渲染引擎）合成。
@@ -441,7 +443,7 @@ BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更
 % DrmFbImporter 将 Android Buffer 转换为 drm\_fb → 绑定到 Plane 的 FB\_ID 属性。
 
 
-\subsubsection{图形缓存分配模块}
+\subsection{图形缓存分配模块}
 由于Android系统主要用于arm架构，而arm架构下的GPU多数没有自己的独立显存，系统服务SurfaceFlinger申请的帧缓存属于系统内存，而在本课题中，LoongArch架构下，
 GSGPU有自己的专属独立显存。因此首先要解决的是如何让Android的SurfaceFlinger能够在LoongArch架构下运行，而SurfaceFlinger依赖的缓冲区管理的HAL实现就是gralloc。
 依照Android 12的gralloc标准，gralloc模块接口定义有两部分，分别是mapper和allocator，
@@ -575,7 +577,7 @@ DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888
 
 在调用wrapper层的alloc方法时，首先初始化alloc\_args作为gbm后端调用的参数，根据输入的参数对width、height进行对齐处理，然后使用wrapper封装的gbm接口，使用gbm\_bo\_create创建
 一个新的缓冲区对象bo，以bo作为参数以此调用gbm\_bo\_get\_fd获取缓冲区对象的文件描述符、gbm\_bo\_get\_stride获取缓冲区对象的步长、gbm\_bo\_get\_modifier获取缓冲区对象的格式修饰符，
-并在上述步骤完成后可以通过文件描述符对缓冲区进行处理，因此销毁gbm缓冲区对象及时释放资源，如图\ref{fig:alloc过程}。gbm中的缓冲区创建等实现实际上是基于直接渲染架构DRI,在创建dri device时，
+并在上述步骤完成后可以通过文件描述符对缓冲区进行处理，因此销毁gbm缓冲区对象及时释放资源。gbm中的缓冲区创建等实现实际上是基于直接渲染架构DRI,在创建dri device时，
 会搜索目标路径下的所有驱动（本课题使用的是gallium框架实现的驱动）并加载。具体实现会在用户态驱动实现中说明。
 
 % \begin{figure}[h]
@@ -630,6 +632,8 @@ DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888
   \note{}
 \end{table}
 
+\subsection{HIDL接口设计与实现}
+
 % 1.gbm包装模块
 % 用于在使用 Mesa 和 GBM（Generic Buffer Management）时对显存缓冲区（BO，Buffer Object）进行创建、映射、导入和销毁的操作。它通过封装与 GBM API 的交互，
 % 简化了底层内存管理，并与 Android 环境中的驱动配合。实现了以下4个功能模块：
@@ -671,9 +675,9 @@ DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888
 
 % 依据硬件的设计可以选择在初始化时是否使用tiled等模式进行访存优化，提供更灵活的驱动交互方式。
 
-\subsection{Android内核和系统镜像构建}
+\section{Android内核和系统镜像构建}
 
-\subsubsection{内核驱动构建}
+\subsection{内核驱动构建}
 现使用安卓内核版本为5.10,由于龙芯gsgpu内核驱动属于闭源状态，尚未整合到已有的内核源码，采用的方案为驱动模块独立开发的方式，
 这样设计有多个方面的好处，
 
@@ -707,7 +711,7 @@ DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888
   \note{共计48项}
 \end{table}
 
-多版本适配方案设计：
+\subsubsection{多版本适配方案设计}
 由于drm模块的接口变化为某个函数的增加或删除，部分结构体的属性变化，以及函数的参数变化。以空参数调用某个函数时，若函数相关实现已被删除，则测试代码\textbf{不会产生}编译错误，
 仅会在链接时产生错误，而函数存在时，则会产生编译错误，将此种情况命名为function；若某个函数的形参不存在或者结构体或者结构体的某个属性不存在时，则测试代码\textbf{会产生}编译错误，
 此种情况命名为type。这两种情况存在和不存在时目标对象时编译结果完全相反，结果判断如表\ref{tab:测试代码判断表}所示。针对不同实现缺失的情形，返回的编译结果完全相反。
@@ -818,7 +822,7 @@ DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888
   \end{algorithm}
 \end{minipage}
 
-\subsubsection{用户态驱动构建}
+\subsection{用户态驱动构建}
 
 mesa使用的版本为18.3.6,而由于现有的安卓版本为12.0.0,安卓API版本为31对应的mesa版本为20.3.4,因此需要对现有的mesa的dri接口进行升级。并且由于安卓新的
 编译方式Soong的加入，mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用伪编译的方式。为考虑后续版本的兼容性，因此在现有的mesa18.3.6上采用伪编译的方法，
@@ -840,7 +844,7 @@ mesa编译框架如图\ref{fig:mesa编译框架},AOSP编译框架会自动监测
   \label{fig:mesa编译框架}
 \end{figure}
 
-目标动态库说明：
+目标安装动态库说明：
 
 libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
 
@@ -856,7 +860,8 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 
 上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务（如SurfaceFlinger）等使用。
 
-\subsubsection{系统镜像定制}
+
+\subsection{系统镜像定制}
 由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit, MMU）采用页式管理来处理 GPU 所使用的内存，
 所有内部功能模块均使用虚拟地址。在连接到内部网络之前，这些地址需要经过转换。当前，MMU 设计了三级页表结构，且页大小（page size）为 16KB。
 然而，Android 12 尚未支持 16KB 的页大小。这意味着需要对以下几个方面进行修改：
@@ -872,7 +877,8 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 
 % \subsection{内核编译\&bionic\&部分系统服务修改说明}
 
-\textbf{内核定制说明}:本课题所使用的内核是安卓通用内核5.10,因此在编译时需要添加安卓特性相关的驱动支持如ASHMEM、BINDERFS、BINDERIPC等。
+\subsubsection{内核定制}
+本课题所使用的内核是安卓通用内核5.10,因此在编译时需要添加安卓特性相关的驱动支持如ASHMEM、BINDERFS、BINDERIPC等。
 考虑到需要实现对龙芯显卡的支持，在内核编译时需要将loonggpu/lg100\_cp.bin通过CONFIG\_EXTRA\_FIRMWARE选项指定并使用CONFIG\_EXTRA\_FIRMWARE\_DIR指定固件所在的
 位置。由于LG110硬件设计上的限制，因此虚拟内存管理智能使用三级页表，页表大小为16Kb。现需要将内核部分模块做硬件适应性修改，如f2fs模块等，
 详见表\ref{tab:f2fs模块修改说明}。以此为基础，对f2fs模块中所有依赖这几个宏的相关实现进行修改。
@@ -894,7 +900,9 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
   \note{}
 \end{table}
 
-\textbf{bionic\&部分系统服务修改：}这两个部分的适配的动机与内核类似，具体实现可以在bionic/libc/platform/bionic/page.h中实现一个内联page\_size()的函数用以实现从内核
+\subsubsection{根文件系统定制}
+安卓文件系统需要定制的部分可分为bionic和部分系统服务。这两个部分的适配的动机与内核类似，
+具体实现可以在bionic/libc/platform/bionic/page.h中实现一个内联page\_size()的函数用以实现从内核
 中动态获取页表大小，并以此为适配有使用PAGE\_SIZE为4k相关的服务,累积完成40余处的修改。这个函数实现是用getauxval来获取与进程相关的辅助值（auxiliary vector values），而
 辅助向量是内核传递给程序的额外信息，通常是在程序启动时传递给它的，用于提供关于系统环境的各种信息。AT\_PAGESZ就是辅助向量常量之一，用于查询系统的页面大小，如算法\ref{algo:获取内核页面大小}
 同时，由于Android12中有大量的系统服务依然在使用PAGE\_SIZE宏，因此对相关系统服务做一些适应性修改在所难免，如图\ref{fig:androidS 16k适配改动图}
@@ -920,8 +928,6 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
   \caption{龙芯androidS 16k适配改动图}
   \label{fig:androidS 16k适配改动图}
 \end{figure}
-
-
 
 
 % 字段名	对应的函数	功能描述
