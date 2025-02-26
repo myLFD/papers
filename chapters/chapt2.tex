@@ -113,6 +113,7 @@ AOSP源码树的核心包含以下几个部分：
   device/loongson/loongsonboard/subdevs/graphics:龙芯设备图形栈的安装配置文件，对于所需安装的产品包、产品拷贝文件、以及板卡使用的编译宏等进行配置。
 
 \section{Android图形系统结构}
+\label{sec:Android图形系统结构}
 Android 的图形系统是为移动设备特别设计的，结构如图\ref{fig:安卓图形子系统架构图},包含了多个组件，如 SurfaceFlinger、Hardware Composer 
 和各种图形库（如 OpenGL ES 和 Vulkan）。其设计理念主要体现在以下几个方面：
 
@@ -154,6 +155,15 @@ Hardware Composer 硬件抽象层通过查询机制，动态选择最优合成�
 Surface 作为图形渲染的抽象画布，其实现依托于双缓冲队列的同步机制：Dequeued Buffer（应用当前写入到图形缓冲区）、Queued Buffer（等待合成的已完成缓冲区）。
 Canvas API 提供基于 Skia 引擎的软件光栅化能力，是 OpenGL ES 的低级替代方案。
 SurfaceHolder 通过回调接口实现 Surface 参数动态配置，其关键控制维度包括大小和格式等，为图形显示提供了灵活性。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{Surface系统.jpg}
+  \caption{Surface系统的任督二脉}    
+  \label{fig:Surface系统的任督二脉}
+  \cite{邓凡平2011深入理解}
+\end{figure}
+
 
 \subsubsection{跨平台图形接口标准}
 EGL（Embedded-System Graphics Library）作为 GLES 的窗口系统绑定层，实现了平台无关的渲染上下文管理、多重缓冲交换（Double/Triple Buffering）以及图形资源生命周期同步等多种特性，
