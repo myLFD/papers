@@ -6,44 +6,37 @@
 和GPU固件之间的联系。用户态驱动负责向安卓框架提供龙芯硬件支持。而gralloc模块是根据龙芯硬件驱动向安卓上层libui库提供服务，硬件混合渲染(HWC)模块为安卓中进行窗口
 （Layer）合成和显示的HAL模块。（标注：还需完善，暂且这样）
 
-\section{需求分析}
+\section{系统需求分析}
 
-\subsection{兼容性需求}
-根据Android12的兼容性文档\cite{Android-12-cdd}中有关2D和3D图形加速的部分，对于硬件设备和配套驱动作出如下约束，必须支持OpenGL ES 1.1和2.0,
-以及如下10种拓展\ref{tab:Android12兼容拓展要求}。目前龙芯LG110及配套已满足相关最低兼容性要求标准。
+首先对图形系统的关键服务SurfaceFlinger进行分析，分析龙芯显卡需要对图形系统中的哪些组件进行支持，再分析这些组件的需求。
 
-\begin{table}[h]
-  \centering
-  \caption{Android12兼容拓展要求}
-  \label{tab:Android12兼容拓展要求}
-  \begin{tabular}{l}
-    \toprule
-    拓展名  \\
-    \midrule
-    EGL\_KHR\_image \\
-    EGL\_KHR\_image\_base \\
-    EGL\_ANDROID\_image\_native\_buffer \\
-    EGL\_ANDROID\_get\_native\_client\_buffer \\
-    EGL\_KHR\_wait\_sync \\
-    EGL\_KHR\_get\_all\_proc\_addresses \\
-    EGL\_ANDROID\_presentation\_time \\
-    EGL\_KHR\_swap\_buffers\_with\_damage \\
-    EGL\_ANDROID\_recordable \\
-    EGL\_ANDROID\_GLES\_layers \\
-    \bottomrule
-  \end{tabular}
-  \note{}
-\end{table}
+\subsection{SurfaceFlinger关键服务分析}
+Android图形系统作为移动端计算机的核心子系统，构建了从应用程序界面到物理显示设备的完整视觉呈现管道。
+这个复杂的系统包含超过50个核心组件，其中SurfaceFlinger作为系统级的合成引擎，承担着最核心的图形处理任务。
+整个系统的运作可以分解为三个层次架构：应用层、图形处理层和硬件抽象层。
+应用层负责通过UI框架构建图形界面元素，图形处理层包括渲染引擎和合成器引擎，硬件抽象层主要是为这两个引擎提供支持。
+
+渲染引擎分析：渲染引擎​是负责将抽象的图形描述转化为最终可视像素的软件系统。Android渲染引擎默认使用的是skia，
+在SurfaceFlinger初始化过程中，会创建一个线程专门用于skia引擎的初始化并用于后续的图形绘制，
+在SkiaGLRenderEngine::create时，会依次执行eglGetDisplay获取EGL显示句柄，此句柄代表了要渲染的物理设备；eglInitialize初始化EGL环境，并获得EGL的主次版本号；
+eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版本信息、供应商版本信息以及支持的客户端API等，安卓还会使用EGL\_EXTENSIONS
+获取有关安卓特性的拓展并初始化；使用createEglContext在EGL中创建 OpenGL ES 上下文；然后使用eglMakeCurrent将指定的渲染上下文和表面设置为当前的函数。
+因此渲染引擎的正常运行需要OpenGL ES相关实现支持。
+
+合成器引擎分析：SurfaceFlinger中集成了合成器引擎CompositionEngine,也是SurfaceFlinger的核心部分，负责将多个图层按照z轴顺序合成并渲染等。
+其作为硬件混合渲染器的客户端，会通过跨进程通信的方式调用框架中的Icomposer实现和接口，从而完成与具体硬件混合渲染器的交互。因此合成器引擎需要硬件混合渲染器实现的支持。
+而合成器在合成图像时需要向系统申请图形缓存，因此也需要图形内存缓存分配的实现。
+
+由上，为了实现对SurfaceFlinger的支持，需要OpengGL ES实现、硬件抽象层需要完成gralloc和HWC服务。 
 
 \subsection{安卓硬件驱动接口需求}
-
-由于Android组件的实现实际上有自己的标准，因此需要严格按照相应的接口实现。由\ref{sec:Android图形系统结构}可知，实现安卓对龙芯显卡的支持，
-主要是需要实现低级别组件gralloc和hwcomposer，以支持SurfaceFlinger的正确运行。而在Android中，gralloc模块需要完成内存分配、缓冲区映射、
-缓冲区管理、性能优化等多方面的功能，hwcomposer模块则需要实现图层管理、显示输出、合成控制、与gralloc适应相关的功能。
+由上节关键服务分析可知，需要在安卓硬件抽象层实现gralloc和HWC服务。而安卓对硬件抽象层服务有着完成的规范和接口限制，具体需要严格按照相应的接口实现。
+自Android Q版本开始，为了提供图形性能和增强对硬件的支持，对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，
+具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2，本课题基于gralloc4以及composer2.1实现。
+gralloc模块需要完成内存分配、缓冲区映射、缓冲区管理、性能优化等多方面的功能，hwcomposer模块则需要实现图层管理、显示输出、合成控制、与gralloc适应相关的功能。
 gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/hardware/interfaces/graphics/mapper下，
-其中HAL接口表统计如表\ref{tab:gralloc模块HAL接口}。而合成器模块的HAL接口和实现集中定义在/hardware/interfaces/graphics/composer下，
-由于Android hwcomposer非常复杂，包含服务端和客户端，客户端是指如SurfaceFlinger中的CompositionEngine通过binder跨进程调用hwcomposer的实现，
-服务端就是包括hardware下的合成器实现和第三方库实现在内，提供hwcomposer实现的称为服务端。
+其中HAL接口表统计如表\ref{tab:gralloc模块HAL接口}。而HWC模块的实现较为复杂，包含服务端和客户端，服务端的实现集中在/hardware/interfaces/graphics/composer下，
+通过调用硬件供应商的具体实现共同组成服务端，客户端是指如SurfaceFlinger中的CompositionEngine通过跨进程调用服务端的实现。
 在考虑到目前龙芯硬件平台并没有支持HWC的硬件，因此仅需要保证hwcomposer的client合成模式功能，也就是使用GPU合成图层并写入缓冲区的功能。
 
 \begin{table}[h]
@@ -68,17 +61,64 @@ gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/
   \note{}
 \end{table}
 
+\subsection{兼容性需求}
+由于安卓是一个开源项目，因此任何硬件制造商都可以制造搭载安卓操作系统的设备，但兼容安卓的前提是可以正常运行安卓的执行环境和应用。
+根据Android12的兼容性文档\cite{Android-12-cdd}中有关2D和3D图形加速的部分，对于显卡和配套驱动作出如下约束，必须支持OpenGL ES 1.1和2.0,
+以及如下10种拓展\ref{tab:Android12兼容拓展要求}。目前龙芯LG110及配套已满足相关兼容性标准。
+
+\begin{table}[h]
+  \centering
+  \caption{Android12兼容拓展要求}
+  \label{tab:Android12兼容拓展要求}
+  \begin{tabular}{l}
+    \toprule
+    拓展名  \\
+    \midrule
+    EGL\_KHR\_image \\
+    EGL\_KHR\_image\_base \\
+    EGL\_ANDROID\_image\_native\_buffer \\
+    EGL\_ANDROID\_get\_native\_client\_buffer \\
+    EGL\_KHR\_wait\_sync \\
+    EGL\_KHR\_get\_all\_proc\_addresses \\
+    EGL\_ANDROID\_presentation\_time \\
+    EGL\_KHR\_swap\_buffers\_with\_damage \\
+    EGL\_ANDROID\_recordable \\
+    EGL\_ANDROID\_GLES\_layers \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\subsection{架构差异分析}
+\label{sec:架构差异分析}
+本课题需要在LoongArch架构下实现，而Android多应用于ARM架构，ARM与LoongArch架构的图形系统有较大差异，具体表现为ARM架构下的GPU没有独立显存\cite{Inki}，
+而在LoongArch的内核中，是使用DRI框架来调用GPU，并且GPU有自己的独立显存。
+对LG110内存模型进行分析，LG110内存架构采用分层设计\ref{fig:LG110内存模型}，包含GPU本地VRAM和系统主存中的GTT内存模块。
+其实现原理体现为：GPU的VRAM通过PCI总线直接映射至CPU的地址空间，允许CPU通过标准PCIe协议直接访问这部分显存资源；
+而GTT内存作为动态管理区域，借助页表机制将系统物理内存映射到虚拟地址空间，需经MMU转换后才能被访问。
+就GPU端的数据访问逻辑而言，其采用分级的页表管理策略。针对本地VRAM区域，页表项直接记录该存储块的物理地址，使得GPU可直接基于物理地址进行存取操作；
+而对于映射至系统主存的GTT区域，页表项存储的是经过DMA引擎转换后的设备地址，因此可以根据DMA的地址发起 DMA 请求获取数据。
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\textwidth]{LG110内存模型.jpg}
+  \caption{LG110内存模型}
+  \label{fig:LG110内存模型}
+\end{figure}
+
+因此，首先需要解决的是在LoongArch架构下，Android系统中显存和系统内存分配映射的问题。AndroidX86\cite{AndroidX86}
+很大程度上解决这个问题，该项目使用Mesa作为OpenGL ES实现，基于DRM和GEM实现了gralloc模块，成功的在x86架构下运行SurfaceFlinger并实现硬件加速\cite{XTYY201710015}。
+基于这个思路，我们也可以使用Mesa作为OpenGL ES实现以及mesa提供的GBM（General Buffer Manager）来管理缓冲区，为此需要LoongArch架构的DRM框架和用户态libdrm的支持。
+其中DRM框架需要基于安卓通用内核5.10实现。
 % \subsubsection{安卓硬件驱动接口需求}
 % 2.更多特性支持
-% \subsection{非功能性需求}
+% \subsection{非功能性需求} 
 % 1.兼容性
 % 2.高效性
 % 3.快速启动
 
-\section{龙芯安卓图形系统的整体构成}
-Android的图形系统作为安卓最复杂的模块之一，在开始移植的工作之前，首先需要对其整体结构做一个分析。为了兼容硬件供应商的不同的底层硬件实现，
-安卓framework层定义了大量的抽象接口规定了每个安卓版本的所需实现的功能，而具体的功能实现则需要各家硬件供应商去实现。本节首先阐述安卓图形系统的整体结构，
-拆分Android 图形模块的组件并与龙芯现有的驱动栈进行联系分析，明确图形系统的方案。
+\section{图形系统整体设计}
+经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述。
 
 \begin{figure}[h]
   \centering
@@ -103,25 +143,6 @@ Android的图形系统作为安卓最复杂的模块之一，在开始移植的�
 Mapper负责将已分配的缓冲区映射到进程的虚拟地址空间。本课题需要实现支持龙芯硬件平台的gralloc和HWC模块的库以支持SurfaceFlinger的正确运行，即\ref{fig:图形栈总体结构图}中
 需实现部分标注。
 
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{LG110内存模型.jpg}
-  \caption{LG110内存模型}
-  \label{fig:LG110内存模型}
-\end{figure}
-
-由于Android多应用于ARM架构，而ARM与LoongArch架构的图形系统有较大差异，具体表现为ARM架构下的GPU没有独立显存\cite{Inki}，而在LoongArch的内核中，是使用DRI框架来调用GPU，
-并且GPU有自己的独立显存。对LG110内存模型进行分析，LG110的内存架构分为两部分：GPU本地的VRAM和系统主存中的GTT内存。如图\ref{fig:LG110内存模型}GPU的VRAM被映射到CPU的PCI地址空间，而GTT内存则通过页表映射到系统内存中。
-CPU可以直接通过PCI地址访问GPU的VRAM，而GTT内存则通过MMU映射到用户空间进行访问。GPU若访问GTT内存时，会通过DMA请求将数据异步传输到GPU。
-CPU访问GPU内存和GPU访问GPU内存有不同的方式:
-CPU访问GPU内存时通过PCI地址可以直接访问 GPU 的 VRAM 内存，而由于GPU的GTT内存本质上是系统内存，应用程序和内核可以通过 MMU 将主存物理地址分别映射到用户地址空间和内核地址空间再访问。
-GPU访问GPU内存时GPU 通过页表机制访问 GPU 内存。对于 VRAM，页表中填的物理地址是 VRAM 的实际物理地址，而对于系统主存，页表上填的物理地址是 DMA 地址。
-因此当GPU地址位于系统主存上时，根据 DMA的地址发起 DMA 请求，通过 DMA 获取数据。
-因此，首先需要解决的是在LoongArch架构下，Android系统中显存和系统内存分配映射的问题。AndroidX86\cite{AndroidX86}
-很大程度上解决这个问题，该项目使用Mesa作为OpenGL ES实现，基于DRM和GEM实现了gralloc模块，成功的在x86架构下运行SurfaceFlinger并实现硬件加速\cite{XTYY201710015}。
-但是Android自Q版本开始，为了提供图形性能和增强对硬件的支持，对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，
-在实现gralloc和HWC时需要考虑API的兼容性。具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2。
-
 龙芯显卡驱动栈的方案，采用了mesa作为用户态驱动提供OpenGL ES实现和GBM加上DRM显示框架的方案。
 安卓的framework层以及库函数依赖的图形接口是由libdrm进行封装，包括上文提及的gralloc和HWC都是需要使用libdrm定义的接口。
 libdrm是一个用户态空间的库，提供了与 Linux 内核中的 DRM子系统交互的接口。它是 Linux 图形栈的核心组件之一（同样也是Android图形栈的方案），
@@ -136,15 +157,8 @@ OpenGL ES的实现是由用户态驱动mesa提供，而mesa实现的OpenGL ES接
 % 由于内核DRM模块的变化较多，因此在原有的4.19的驱动栈基础上，需要实现5.10的驱动栈。该方案并不涉及图形编程接口即OpenGL ES的实现，而主要集中于图形缓冲区的分配上，在后续章节会说明相关变化。
 % 因此在\ref{fig:图形栈总体结构图}上标注loongson硬件支持表示需要进行一定的版本适配。
 
-在后续章节中，将从内核驱动、用户态驱动、Android HAL层实现以及系统镜像定制等4个部分说明方案。
+在后续章节中，将从驱动内核模块、用户态驱动、Android HAL层实现以及系统镜像定制等4个部分说明方案。
 
-% \subsection{渲染引擎后端支持龙芯GPU}
-
-% Android 2D渲染引擎默认使用的是skia，在SurfaceFlinger初始化过程中，会创建一个线程专门用于skia引擎的初始化并用于后续的图形绘制，
-% 因此surfaceflinger初始化过程的关键是skia引擎的初始化。在SkiaGLRenderEngine::create时，
-% 会依次执行eglGetDisplay获取EGL显示句柄，此句柄代表了要渲染的物理设备；eglInitialize初始化EGL环境，并获得EGL的主次版本号；
-% eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版本信息、供应商版本信息以及支持的客户端API等，安卓还会使用EGL\_EXTENSIONS
-% 获取有关安卓特性的拓展并初始化；使用createEglContext在EGL中创建 OpenGL ES 上下文；然后使用eglMakeCurrent将指定的渲染上下文和表面设置为当前的函数。
 
 % 下面以eglInitialize为例，说明surfaceflinger是如何通过安卓的framework层的接口调用龙芯用户态驱动程序的。
 
@@ -156,6 +170,213 @@ OpenGL ES的实现是由用户态驱动mesa提供，而mesa实现的OpenGL ES接
 
 \section{GPU驱动内核模块的实现}
 
+在DRM框架中，libdrm是沟通和连接内核空间和用户空间的重要一环。它通过对多种ioctl底层接口进行封装，以向上提供通用的接口。用户空间的驱动可以通过
+libdrm提供的库函数与系统内核进行交互，从而访问底层资源。如图\ref{fig:内核驱动结构图}，libdrm\_gsgpu作为安卓用户空间的驱动程序，它会与底层的DRM内核驱动程序进行通信，
+从而完成配置、读取、传输、控制设备等多种行为。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{内核驱动结构图.jpg}
+  \caption{内核驱动结构图}
+  \label{fig:内核驱动结构图}
+\end{figure}
+
+\subsection{IOCTL命令码设计}
+在内核驱动程序中，除了基本的设备读写操作（即读取和写入数据）外，设备驱动程序还需要支持对设备执行各种控制操作。
+这些控制操作通常是通过 ioctl（Input/Output Control）机制来实现的，它提供了一种用户空间和内核空间之间进行特定设备操作交互的方式。
+IOCTL 可以用于实现设备驱动的各种功能，包括配置设备、读取设备状态、传输数据、控制设备行为等，而这些具体的功能需要在驱动程序中实现。
+本课题的GPU驱动模块是基于DRM框架，而DRM框架下核心系统调用入口函数ioctl实现的函数原型为
+
+long drm\_ioctl(struct file *filp,unsigned int cmd, unsigned long arg)
+
+其中filp是用户空间传递的文件描述符，表示打开的 DRM 设备文件的上下文，cmd 是用户空间传入的 IOCTL 命令标识符，一般是提前定义好的操作码，与内核驱动中具体的操作函数相对应。
+args 是以unsigned long类型传递的，是用户空间传递的命令参数，可能是整数值或者是结构体指针。
+
+因此要实现IOCTL首先需要设计选择ioctl命令码。在linux内核中，ioctl的命令码的结构是一个32位的整数，由四个部分组成，从高位往低位依次是\ref{tab:ioctl命令码结构}：
+方向位，占用命令码的第 ​31-30 位​,标识命令的数据传输方向，可能的值有\_IOC\_NONE(无数据)、\_IOC\_READ（内核读）、\_IOC\_WRITE（内核写）、\_IOC\_READ|\_IOC\_WRITE（双向数据）；
+类型，又称幻数，占用命令码的第 ​24-27 位,用于标识命令所属的设备或子系统，防止命令冲突,通常会选择一个ASCII 字符，确保不同驱动间的幻数不重复，本文由于涉及到的是drm模块所以是d。
+同时幻数定义需要在内核驱动和用户空间如libdrm中头文件保持一致；
+序号，占用命令码的第 ​16-23 位，在同一幻数下唯一标识具体命令;
+数据大小占用命令码的第 ​0-15 位，是ioctl操作涉及的数据结构大小（以字节为单位）,仅会对\_IOW、\_IOR、\_IOWR命令有效。
+综合各字段，完整的命令码计算方式为：
+
+cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
+
+在linux内核中还定义了几个辅助宏用于生成具体的命令码，如图\ref{fig:IOCTL辅助宏定义}。
+
+\begin{table}[h]
+  \centering
+  \caption{ioctl命令码结构}
+  \label{tab:ioctl命令码结构}
+  \begin{tabular}{llll}
+    \toprule
+    方向  & 类型 & 序号 & 数据大小 \\
+    \midrule
+    2bit & 8bit & 8bit & 14bit \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{IOCTL辅助宏定义.png}
+  \caption{IOCTL辅助宏定义}
+  \label{fig:IOCTL辅助宏定义}
+\end{figure}
+
+在课题场景下，需要将内核调用的结果返回，因此使用双向的数据传输作为基础，实现GSGPU的ioctl。
+为了给用户态程序提供创建和管理 GEM（图形内存对象）到处理上下文、命令流、内存映射、调度等支持，定义了如表\ref{tab:IOCTL命令码表}ioctl命令码。
+
+\begin{table}[h]  
+  \centering
+  \caption{IOCTL命令码表}
+  \label{tab:IOCTL命令码表}
+  \resizebox{\linewidth}{!}{
+  \begin{tabular}{llll}
+    \toprule
+    序号​	&​ 命令​ &​ 功能领域​	& 映射函数 \\
+    \midrule
+    0x00	& DRM\_GSGPU\_GEM\_CREATE	& ​GEM 内存管理​ & gsgpu\_gem\_create\_ioctl \\
+    0x01	& DRM\_GSGPU\_GEM\_MMAP	& ​内存映射​ & gsgpu\_gem\_mmap\_ioctl \\
+    0x02	& DRM\_GSGPU\_CTX	& ​上下文管理​	& gsgpu\_ctx\_ioctl\\
+    0x03	& DRM\_GSGPU\_BO\_LIST	& ​缓冲区对象列表​	& gsgpu\_bo\_list\_ioctl\\
+    0x04	& DRM\_GSGPU\_CS	& ​命令流控制​	& gsgpu\_cs\_ioctl\\
+    0x05	& DRM\_GSGPU\_INFO	& ​设备信息查询​	& gsgpu\_info\_ioctl\\
+    0x06	& DRM\_GSGPU\_GEM\_METADATA	& ​元数据管理​	& gsgpu\_gem\_metadata\_ioctl\\
+    0x07	& DRM\_GSGPU\_GEM\_WAIT\_IDLE	& ​同步与闲置状态​	& gsgpu\_gem\_wait\_idle\_ioctl\\
+    0x08	& DRM\_GSGPU\_GEM\_VA	& ​虚拟地址分配​	& gsgpu\_gem\_va\_ioctl\\
+    0x09	& DRM\_GSGPU\_WAIT\_CS	& ​命令流同步​	& gsgpu\_cs\_wait\_ioctl\\
+    0x10	& DRM\_GSGPU\_GEM\_OP	& ​通用 GEM 操作​	& gsgpu\_gem\_op\_ioctl\\
+    0x11	& DRM\_GSGPU\_GEM\_USERPTR	& ​用户指针支持​	& gsgpu\_gem\_userptr\_ioctl\\
+    0x12	& DRM\_GSGPU\_WAIT\_FENCES	& ​栅栏同步​	& gsgpu\_cs\_wait\_fences\_ioctl\\
+    0x13	& DRM\_GSGPU\_VM	& ​虚拟内存管理​	& gsgpu\_vm\_ioctl\\
+    0x14	& DRM\_GSGPU\_FENCE\_TO\_HANDLE	& ​栅栏与句柄映射​	& gsgpu\_cs\_fence\_to\_handle\_ioctl\\
+    0x15	& DRM\_GSGPU\_SCHED	& ​任务调度​	& gsgpu\_sched\_ioctl\\
+    0x16	& DRM\_GSGPU\_HWSEMA\_OP	& ​硬件信号量操作​	& gsgpu\_hw\_sema\_op\_ioctl\\
+    \bottomrule
+    \end{tabular}
+  }
+  \note{}
+\end{table}
+
+由于这些功能大部分需要双向数据传输，所以大部分的命令码使用辅助宏DRM\_IOWR，可以用公式表示为：
+
+\#define DRM\_IOCTL\_ioctl
+
+ DRM\_IOWR(DRM\_COMMAND\_BASE+DRM\_ioctl,union structIoctl)
+
+其中ioctl对应某个命令码，以DRM\_GSGPU\_GEM\_CREATE为例，ioctl=GSGPU\_GEM\_CREATE,structIoctl表示该命令码对应的数据大小，
+DRM\_IOCTL\_ioctl实际上就是经过DRM\_COMMAND\_BASE基地址偏移的命令码。
+每个命令码都对应具体的函数实现，通过DRM系统提供的DRM\_IOCTL\_DEF\_DRV宏完成联系。
+这个宏的作用是将驱动私有的 IOCTL 命令注册到 DRM 的统一命令表中，并关联对应的处理函数和权限标志。如图\ref{fig:ioctl def drv}。
+这里实际上将DRM命令、处理该命令的内核函数指针、权限标志和命令的字符串名称分别存入cmd、func、flags和name域，在内核模块进行PCI设备注册时，
+将命令表封装进drm\_device结构体的数据中，并在用户态程序进行ioctl系统调用时根据DRM命令码调用对应的内核函数func实现。
+DRM命令码与内核处理函数func的映射关系已在表\ref{tab:IOCTL命令码表}中展示。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{ioctl def drv.png}
+  \caption{DRM\_IOCTL\_DEF\_DRV宏实现}
+  \label{fig:ioctl def drv}
+\end{figure}
+
+如表\ref{tab:IOCTL命令码表}这些命令码按照功能主要用于4个模块：
+
+1.内存管理模块：
+
+GSGPU\_GEM\_CREATE:在内核中为GPU设备分配并初始化一个GEM对象。
+
+GSGPU\_GEM\_MMAP：将GEM对象映射到用户空间，允许用户态直接访问显存。
+
+GSGPU\_GEM\_METADATA：设置/获取GEM对象的元数据，主要用于tiling模式或者缓存策略的选择。
+
+GSGPU\_GEM\_VA：管理GEM对象的虚拟地址绑定，控制GPU虚拟地址空间映射。
+
+GSGPU\_GEM\_USERPTR：通过用户态指针注册内存作为GEM对象，支持零拷贝数据传输。
+
+GSGPU\_GEM\_OP：对GEM对象执行通用操作，包括创建信息、设置内存放置域等。
+
+GSGPU\_BO\_LIST：管理一组缓冲区对象操作的集合，用于批量操作。
+
+2.命令流与调度模块
+
+GSGPU\_CS：提交命令流到GPU硬件执行。
+
+GSGPU\_SCHED：配置调度策略，更改命令流执行顺序。
+
+3.同步机制模块
+
+GSGPU\_FENCE\_TO\_HANDLE：将栅栏转换为句柄，支持跨进程同步。
+
+GSGPU\_WAIT\_CS：等待指定命令流完成执行。
+
+GSGPU\_WAIT\_FENCES：等待多个栅栏信号完成。
+
+GSGPU\_HWSEMA\_OP：操作硬件信号量，控制硬件级资源争用。
+
+GSGPU\_GEM\_WAIT\_IDLE：等待GEM对象关联的所有GPU操作完成。
+
+4.上下文和虚拟化管理模块
+
+GSGPU\_CTX：创建/销毁GPU上下文，管理上下文资源。
+
+GSGPU\_VM：GPU 虚拟化管理的基础接口。
+
+\subsection{内存管理模块}
+LG110的内存模型在小节\ref{sec:架构差异分析}和图\ref{fig:LG110内存模型}中已有相关说明。
+模块主要功能是管理GPU显存资源（GEM对象）的创建、映射、元数据操作及虚拟地址绑定等。
+其主要依赖GEM和TTM对缓冲区对象进行管理。
+GEM是内核中用于图形缓冲区管理的一个核心模块，特别是在与图形硬件（如 GPU）交互时。
+它是 DRM的一部分，旨在为图形硬件分配、管理和共享内存资源。GEM 的设计目的是简化内存管理，确保图形缓冲区的高效分配和使用，并且能够支持多种类型的设备和硬件架构。
+GEM 主要通过图形缓冲区的对象（drm\_gem\_object）来管理 GPU 和显示硬件之间的内存。TTM(Translation Table Manager)适用于GPU内存管理的一部分，
+提供了对显存、主存、共享内存等不同类型内存的管理功能。它通过一个通用的 API 提供内存分配、缓冲区对象管理和内存交换等功能，使得 GPU 驱动能够灵活管理图形资源。
+在GPU内存管理中实际上不关心纹理会被分配到哪个内存，GPU内存会使用BO缓冲区对象去作为GPU显存使用的最小单位。
+简单来说，GEM分配的显存对象底层drm\_gem\_object通过TTM的ttm\_buffer\_object管理物理内存。
+
+TTM实际上是使用GEM实现内存管理框架，在GEM模块实现了龙芯自己的数据结构，主要场景包括将VRAM转移到RAM或者从RAM转移到VRAM，以及BO的映射以实现CPU的访问。
+
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{DRM TTM结构.jpg}
+%   \caption{TTM主要对象}
+% \end{figure}
+
+
+\subsection{libdrm接口实现}
+在libdrm中，会通过drmCommandWriteRead封装的读写命令，对内核IOCTL实现进行调用。以gsgpu\_bo\_alloc为例，会在系统内存calloc一块BO缓冲区对象大小的内存，并通过
+drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为偏移值，以DRM\_COMMAND\_BASE作为基址获取命令编号，DRM\_IOCTL\_BASE作为操作类型，使用args的大小作为命令数据的大小，
+方向默认双向，向内核请求特定的IOCTL操作，随后使用ioctl执行系统调用，操纵DRM设备。libdrm中有关缓冲区对象操作的接口函数如表\ref{tab:libdrmBO接口表}，旁边是libdrm函数执行的内核调用的
+命令序号，通过上节的IOCTL实现，完成对DRM设备的特定操作。
+
+\begin{table}[h]
+  \centering
+  \caption{libdrmBO接口表}
+  \label{tab:libdrmBO接口表}
+  \begin{tabular}{ll}
+    \toprule
+    libdrm实现  & 命令序号 \\
+    \midrule
+    gsgpu\_bo\_alloc& DRM\_GSGPU\_GEM\_CREATE  \\
+    gsgpu\_bo\_cpu\_map & DRM\_GSGPU\_GEM\_MMAP \\
+    gsgpu\_bo\_cpu\_unmap & / \\
+    gsgpu\_bo\_export & / \\
+    gsgpu\_bo\_free & / \\
+    gsgpu\_bo\_import & / \\
+    gsgpu\_bo\_list\_create & DRM\_GSGPU\_BO\_LIST \\
+    gsgpu\_bo\_list\_destroy & DRM\_GSGPU\_BO\_LIST \\
+    gsgpu\_bo\_list\_update & DRM\_GSGPU\_BO\_LIST \\
+    gsgpu\_bo\_query\_info & DRM\_GSGPU\_GEM\_OP|DRM\_GSGPU\_GEM\_METADATA \\
+    gsgpu\_bo\_set\_metadata & DRM\_GSGPU\_GEM\_METADATA \\
+    gsgpu\_bo\_va\_op\_raw & DRM\_GSGPU\_GEM\_VA \\
+    gsgpu\_bo\_wait\_for\_idle & DRM\_GSGPU\_GEM\_WAIT\_IDLE \\
+    gsgpu\_create\_bo\_from\_user\_mem & DRM\_GSGPU\_GEM\_USERPTR \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\subsection{多版本适配方案设计}
 龙芯gsgpu内核驱动属于闭源状态，尚未整合到已有的内核源码，采用的方案为驱动模块独立开发的方式，这样设计有多个方面的好处，
 
 一是为了适应多种方式加载驱动模块的需求，既可以通过加载/lib/modules/\$(kernel\_uname)下
@@ -188,7 +409,6 @@ OpenGL ES的实现是由用户态驱动mesa提供，而mesa实现的OpenGL ES接
   \note{共计48项}
 \end{table}
 
-\subsection{多版本适配方案设计}
 由于drm模块的接口变化为某个函数的增加或删除，部分结构体的属性变化，以及函数的参数变化。以空参数调用某个函数时，若函数相关实现已被删除，则测试代码\textbf{不会产生}编译错误，
 仅会在链接时产生错误，而函数存在时，则会产生编译错误，将此种情况命名为function；若某个函数的形参不存在或者结构体或者结构体的某个属性不存在时，则测试代码\textbf{会产生}编译错误，
 此种情况命名为type。这两种情况存在和不存在时目标对象时编译结果完全相反，结果判断如表\ref{tab:测试代码判断表}所示。针对不同实现缺失的情形，返回的编译结果完全相反。
@@ -299,147 +519,6 @@ OpenGL ES的实现是由用户态驱动mesa提供，而mesa实现的OpenGL ES接
   \end{algorithm}
 \end{minipage}
 
-\subsection{IOCTL实现}
-
-在内核驱动程序中，除了基本的设备读写操作（即读取和写入数据）外，设备驱动程序还需要支持对设备执行各种控制操作。
-这些控制操作通常是通过 ioctl（Input/Output Control）机制来实现的，它提供了一种用户空间和内核空间之间进行特定设备操作交互的方式。
-IOCTL 可以用于实现设备驱动的各种功能，包括配置设备、读取设备状态、传输数据、控制设备行为等， 而这些具体的功能需要在驱动程序中实现。
-在DRM框架中，libdrm是沟通和连接内核空间和用户空间的重要一环。它通过对多种ioctl底层接口进行封装，以向上提供通用的接口。用户空间的驱动可以通过
-libdrm提供的库函数与系统内核进行交互，从而访问底层资源。如图\ref{fig:内核驱动结构图}，libdrm\_gsgpu作为安卓用户空间的驱动程序，它会与底层的DRM内核驱动程序进行通信，
-从而完成配置、读取、传输、控制设备等多种行为。
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{内核驱动结构图.jpg}
-  \caption{内核驱动结构图}
-  \label{fig:内核驱动结构图}
-\end{figure}
-
-linux内核中，ioctl的命令码的结构是一个32位的整数，由四个部分组成，从高位往低位依次是\ref{fig:ioctl命令码结构}：
-方向位，定义了数据传输的方向，可能的值有\_IOC\_NONE(无数据)、\_IOC\_READ（内核读）、\_IOC\_WRITE（内核写）、\_IOC\_READ|\_IOC\_WRITE（双向数据）；
-类型，又称幻数，唯一标志一个驱动或者模块,防止命令码冲突,通常会选择一个ASCII 字符，确保不同驱动间的幻数不重复，本文由于涉及到的是drm模块所以是d，
-同时幻数定义需要在内核驱动和用户空间如libdrm中头文件保持一致；
-序号，是为了区分同一驱动内的不同 ioctl 命令;数据大小则是ioctl操作涉及的数据结构大小（以字节为单位）,具体的定义如\ref{fig:IOCTL宏定义}。
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{ioctl命令码结构.jpg}
-  \caption{ioctl命令码结构}
-  \label{fig:ioctl命令码结构}
-\end{figure}
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{IOCTL宏定义.png}
-  \caption{IOCTL宏定义}
-  \label{fig:IOCTL宏定义}
-\end{figure}
-
-在课题场景下，需要将内核调用的结果返回，因此使用双向的数据传输作为基础，实现GSGPU的ioctl。
-为了给用户态程序提供创建和管理 GEM（图形内存对象）到处理上下文、命令流、内存映射、调度等支持，定义了如表\ref{tab:IOCTL命令码}ioctl命令码。
-
-\begin{table}[h]  
-  \centering
-  \caption{IOCTL命令码}
-  \label{tab:IOCTL命令码}
-  \resizebox{\linewidth}{!}{
-  \begin{tabular}{ll}
-    \toprule
-    宏名  & 命令码\\  
-    \midrule
-    DRM\_IOCTL\_GSGPU\_GEM\_CREATE   &   DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_CREATE, union drm\_gsgpu\_gem\_create) \\
-    DRM\_IOCTL\_GSGPU\_GEM\_MMAP   &     DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_MMAP, union drm\_gsgpu\_gem\_mmap)\\
-    DRM\_IOCTL\_GSGPU\_CTX        &     DRM\_IOWR(BASE + DRM\_GSGPU\_CTX, union drm\_gsgpu\_ctx)\\
-    DRM\_IOCTL\_GSGPU\_BO\_LIST  & DRM\_IOWR(BASE + DRM\_GSGPU\_BO\_LIST, union drm\_gsgpu\_bo\_list)\\
-    DRM\_IOCTL\_GSGPU\_CS         &     DRM\_IOWR(BASE + DRM\_GSGPU\_CS, union drm\_gsgpu\_cs)\\
-    DRM\_IOCTL\_GSGPU\_INFO       &     DRM\_IOW(BASE + DRM\_GSGPU\_INFO, struct drm\_gsgpu\_info)\\
-    DRM\_IOCTL\_GSGPU\_GEM\_METADATA  &  DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_METADATA, struct drm\_gsgpu\_gem\_metadata)\\
-    DRM\_IOCTL\_GSGPU\_GEM\_WAIT\_IDLE &  DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_WAIT\_IDLE, union drm\_gsgpu\_gem\_wait\_idle)\\
-    DRM\_IOCTL\_GSGPU\_GEM\_VA       &   DRM\_IOW(BASE + DRM\_GSGPU\_GEM\_VA, struct drm\_gsgpu\_gem\_va)\\
-    DRM\_IOCTL\_GSGPU\_WAIT\_CS & DRM\_IOWR(BASE + DRM\_GSGPU\_WAIT\_CS, union drm\_gsgpu\_wait\_cs)\\
-    DRM\_IOCTL\_GSGPU\_GEM\_OP    &      DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_OP, struct drm\_gsgpu\_gem\_op)\\
-    DRM\_IOCTL\_GSGPU\_GEM\_USERPTR   &  DRM\_IOWR(BASE + DRM\_GSGPU\_GEM\_USERPTR, struct drm\_gsgpu\_gem\_userptr)\\
-    DRM\_IOCTL\_GSGPU\_WAIT\_FENCES   &  DRM\_IOWR(BASE + DRM\_GSGPU\_WAIT\_FENCES, union drm\_gsgpu\_wait\_fences)\\
-    DRM\_IOCTL\_GSGPU\_VM            &  DRM\_IOWR(BASE + DRM\_GSGPU\_VM, union drm\_gsgpu\_vm)\\
-    DRM\_IOCTL\_GSGPU\_FENCE\_TO\_HANDLE & DRM\_IOWR(BASE + DRM\_GSGPU\_FENCE\_TO\_HANDLE, union drm\_gsgpu\_fence\_to\_handle)\\
-    DRM\_IOCTL\_GSGPU\_SCHED         &  DRM\_IOW(BASE + DRM\_GSGPU\_SCHED, union drm\_gsgpu\_sched)\\
-    DRM\_IOCTL\_GSGPU\_HWSEMA\_OP      & DRM\_IOWR(BASE + DRM\_GSGPU\_HWSEMA\_OP, struct drm\_gsgpu\_hw\_sema)\\
-    \bottomrule
-  \end{tabular}
-  }
-  \note{
-    BASE=DRM\_COMMAND\_BASE
-  }
-\end{table}
-
-% #define DRM_IOWR(nr,type)           _IOWR(DRM_IOCTL_BASE,nr,type)
-% DRM_IOCTL_DEF_DRV(GSGPU_GEM_CREATE, gsgpu_gem_create_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_CTX, gsgpu_ctx_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_VM, gsgpu_vm_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_SCHED, gsgpu_sched_ioctl, DRM_MASTER),
-%         DRM_IOCTL_DEF_DRV(GSGPU_BO_LIST, gsgpu_bo_list_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_FENCE_TO_HANDLE, gsgpu_cs_fence_to_handle_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         /* KMS */
-%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_MMAP, gsgpu_gem_mmap_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_WAIT_IDLE, gsgpu_gem_wait_idle_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_CS, gsgpu_cs_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_INFO, gsgpu_info_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_WAIT_CS, gsgpu_cs_wait_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_WAIT_FENCES, gsgpu_cs_wait_fences_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_METADATA, gsgpu_gem_metadata_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_VA, gsgpu_gem_va_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_OP, gsgpu_gem_op_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_GEM_USERPTR, gsgpu_gem_userptr_ioctl, DRM_AUTH|DRM_RENDER_ALLOW),
-%         DRM_IOCTL_DEF_DRV(GSGPU_HWSEMA_OP, gsgpu_hw_sema_op_ioctl, DRM_AUTH|DRM_RENDER_ALLOW)
-
-
-\subsection{libdrm接口实现}
-在libdrm中，会通过drmCommandWriteRead封装的读写命令，对内核IOCTL实现进行调用。以gsgpu\_bo\_alloc为例，会在系统内存calloc一块BO缓冲区对象大小的内存，并通过
-drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为偏移值，以DRM\_COMMAND\_BASE作为基址获取命令编号，DRM\_IOCTL\_BASE作为操作类型，使用args的大小作为命令数据的大小，
-方向默认双向，向内核请求特定的IOCTL操作，随后使用ioctl执行系统调用，操纵DRM设备。libdrm中有关缓冲区对象操作的接口函数如表\ref{tab:libdrmBO接口表}，旁边是libdrm函数执行的内核调用的
-命令序号，通过上节的IOCTL实现，完成对DRM设备的特定操作。
-
-\begin{table}[h]
-  \centering
-  \caption{libdrmBO接口表}
-  \label{tab:libdrmBO接口表}
-  \begin{tabular}{ll}
-    \toprule
-    libdrm实现  & 命令序号 \\
-    \midrule
-    gsgpu\_bo\_alloc& DRM\_GSGPU\_GEM\_CREATE  \\
-    gsgpu\_bo\_cpu\_map & DRM\_GSGPU\_GEM\_MMAP \\
-    gsgpu\_bo\_cpu\_unmap & / \\
-    gsgpu\_bo\_export & / \\
-    gsgpu\_bo\_free & / \\
-    gsgpu\_bo\_import & / \\
-    gsgpu\_bo\_list\_create & DRM\_GSGPU\_BO\_LIST \\
-    gsgpu\_bo\_list\_destroy & DRM\_GSGPU\_BO\_LIST \\
-    gsgpu\_bo\_list\_update & DRM\_GSGPU\_BO\_LIST \\
-    gsgpu\_bo\_query\_info & DRM\_GSGPU\_GEM\_OP|DRM\_GSGPU\_GEM\_METADATA \\
-    gsgpu\_bo\_set\_metadata & DRM\_GSGPU\_GEM\_METADATA \\
-    gsgpu\_bo\_va\_op\_raw & DRM\_GSGPU\_GEM\_VA \\
-    gsgpu\_bo\_wait\_for\_idle & DRM\_GSGPU\_GEM\_WAIT\_IDLE \\
-    gsgpu\_create\_bo\_from\_user\_mem & DRM\_GSGPU\_GEM\_USERPTR \\
-    \bottomrule
-  \end{tabular}
-  \note{}
-\end{table}
-
-% \subsection{GEM/TTM模块}
-% GEM（Graphics Execution Manager）是内核中用于图形缓冲区管理的一个核心模块，特别是在与图形硬件（如 GPU）交互时。
-% 它是 DRM的一部分，旨在为图形硬件分配、管理和共享内存资源。GEM 的设计目的是简化内存管理，确保图形缓冲区的高效分配和使用，并且能够支持多种类型的设备和硬件架构。
-% GEM 主要通过图形缓冲区的对象（drm\_gem\_object）来管理 GPU 和显示硬件之间的内存。TTM(Translation Table Manager)适用于GPU内存管理的一部分，
-% 提供了对显存（VRAM）、主存、共享内存等不同类型内存的管理功能。它通过一个通用的 API 提供内存分配、缓冲区对象管理和内存交换等功能，使得 GPU 驱动能够灵活管理图形资源。
-% 在GPU内存管理中实际上不关心纹理会被分配到哪个内存，GPU内存会使用BO（Buffer Object）缓冲区对象去作为GPU显存使用的最小单位。
-% TTM实际上是使用GEM实现内存管理框架，在GEM模块实现了龙芯自己的数据结构，主要场景包括将VRAM转移到RAM或者从RAM转移到VRAM，以及BO的映射以实现CPU的访问。
-
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.8\textwidth]{DRM TTM结构.jpg}
-%   \caption{TTM主要对象}
-% \end{figure}
-
 
 \section{GPU用户态驱动缓冲区管理实现}
 % \subsubsection{图形 API 支持}
@@ -549,7 +628,7 @@ BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更
 % 4. 清理围栏数组（gsgpu_bo_remove_fences）
 % 5. 更新内存统计（allocated_vram/gtt）
 
-\section{Android HAL层实现}
+\section{基于龙芯显卡的安卓图形硬件抽象层实现}
 
 \subsection{硬件混合渲染模块}
 %每个厂商hwc实现可能不同如nxp，rockchip，drm-hwc，ranchu，也有很多厂商实现是闭源的如nxp，而谷歌的drm-hwc，ranchu是开源的
@@ -900,12 +979,21 @@ VINTF 文件中的信息会与设备上已安装的 HAL 实现进行对比以验
 
 % 依据硬件的设计可以选择在初始化时是否使用tiled等模式进行访存优化，提供更灵活的驱动交互方式。
 
-\section{Android内核和系统镜像构建}
+% \section{HAL优化}
+% 在上述方案实现中，Android gralloc实际上使用的是mesa提供的图形缓冲区管理接口。在3A5000上运行原生的Native程序，如bootanim，
 
-\subsection{内核驱动构建}
+% \subsection{接口优化}
+% 在实际的测试中发现由于调用栈过长导致访存成为瓶颈。
+% 现重构gbm后端实现以实现对libdrm和DRI驱动的直接调用。
+
+% createImageWithModifiers
+
+% \subsection{tile访存优化}
 
 
-\subsection{用户态驱动构建}
+\section{系统镜像构建}
+
+\subsection{龙芯OpenGL ES驱动构建}
 
 mesa使用的版本为18.3.6,而由于现有的安卓版本为12.0.0,安卓API版本为31对应的mesa版本为20.3.4,因此需要对现有的mesa的dri接口进行升级。并且由于安卓新的
 编译方式Soong的加入，mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用伪编译的方式。为考虑后续版本的兼容性，因此在现有的mesa18.3.6上采用伪编译的方法，
@@ -944,7 +1032,7 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务（如SurfaceFlinger）等使用。
 
 
-\subsection{系统镜像定制}
+\subsection{安卓系统镜像定制}
 由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit, MMU）采用页式管理来处理 GPU 所使用的内存，
 所有内部功能模块均使用虚拟地址。在连接到内部网络之前，这些地址需要经过转换。当前，MMU 设计了三级页表结构，且页大小（page size）为 16KB。
 然而，Android 12 尚未支持 16KB 的页大小。这意味着需要对以下几个方面进行修改：
@@ -1012,6 +1100,12 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
   \label{fig:androidS 16k适配改动图}
 \end{figure}
 
+
+\section{本章小结}
+本章介绍基于龙芯显卡的安卓图形栈的整体设计和具体实现。首先对Android 12的兼容性需求以及HAL接口需求做了分析，然后对图形栈整体的方案做了描述，明确图形栈各组件的实现方案；
+接着说明核模DRM和libdrm的ioctl设计接口，以及为了适应内核的多版本需求所实现的一套内核驱动模块多版本适配方案。然后是说明GPU用户态缓冲区管理的实现，并从gallium实现接口和
+缓冲区对象管理两个方面说明LG110用户态缓冲区管理是如何实现的。随后从硬件混合渲染模块、图形缓存分配模块以及HIDL接口设计与实现说明基于LG110的安卓图形HAL层是如何实现的。
+最后简单说明安卓系统镜像构建方面的需求，包括龙芯OpengGL ES实现的库mesa是如何实现框架外编译，以及因为硬件设计上的缺陷如何对安卓系统镜像进行定制。
 
 % 字段名	对应的函数	功能描述
 % name	"gsgpu_common"	模块的名称，通常用于标识该模块或打印调试信息。

@@ -171,16 +171,41 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
     \note{}
 \end{table}
 
-\subsection{hwcomposer正确性测试}
-\label{sec:hwcomposer测试}
-hwcomposer由于分为客户端和服务端，所以有关客户端的测试用例主要存在于framework下的SurfaceFlinger的实现源码中的CompositionEngine目录下，
-主要用于测试CompositionEngine调用hwcomposer的实现是否正确。
+\subsection{合成引擎正确性测试}
+\label{sec:合成引擎正确性测试}
+这里测试集使用的是SurfaceFlinger的CompositionEngine的测试集libcompositionengine\_test，该测试集主要用于测试CompositionEngine功能的正确性。
+由于CompositionEngine是混合渲染器的客户端，所以该测试集实际上也会对换和渲染器的实现进行测试。该测试集共有71个测试套件482个测试用例，现对测试套件的
+测试功能做简单归纳\ref{tab:libcompositionengine_test测试集}。可分为6个主要部分，显示设备管理、合成引擎测试、硬件合成器测试、输出层测试、
+渲染表面与空间映射和Planner策略模块测试，目前可以通过全部的测试用例。
 
-Composition测试
-hwc测试
+\begin{table}[h]
+    \centering
+    \caption{libcompositionengine\_test测试集}
+    \label{tab:libcompositionengine_test测试集}
+    \begin{tabular}{llll}
+      \toprule
+      类别 &  分类描述 & 数量 & 通过数量\\
+      \midrule
+      显示设备管理 & 硬件交互、颜色配置、基础显示配置 & 21 & 21\\
+      合成引擎测试 & 验证合成引擎提交、更新功能 & 4 & 4\\
+      硬件合成器测试 & HWC缓冲区测试 & 3 & 3\\
+      输出层测试 & 帧准备/提交、表面合成、光标等  & 33 & 33\\
+      渲染表面与空间映射 & 	离屏表面生命周期管理、坐标系变换算法 & 2 & 2\\
+      Planner策略模块测试 & 图层扁平化策略、纹理缓存预测模型、渲染成本优化 & 8 & 8\\
+      \bottomrule
+    \end{tabular}
+    \note{}
+\end{table}
 
-\subsection{渲染引擎测试}
-\label{sec:渲染引擎测试}
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{libcomposer测试截图.png}
+%     \caption{libcomposer测试截图}
+%     \label{fig:libcomposer测试截图}
+% \end{figure}
+
+\subsection{渲染引擎正确性测试}
+\label{sec:渲染引擎正确性测试}
 在安卓的图形系统中，渲染引擎实际上是在SurfaceFlinger进程中创建的一个skiaglthreaded模式，这是为了让所有的GL操作都在同一线程上进行，因为
 OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲染引擎初始化时，会通过GLAPI接口调用具体驱动的GL实现。因此对渲染引擎的测试也是对用户态驱动的
 测试。librenderengine\_test也是AOSP中提供的安卓原生GTest测试用例，主要用于验证图形渲染引擎的功能、稳定性，确保渲染操作在各种场景下能够正确执行，
@@ -259,7 +284,7 @@ OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲�
 
 \subsection{SurfaceFlinger测试}
 SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成所有显示内容，它的正确运行是本课题图形栈方案正确性验证的关键。
-其中合成器引擎和渲染引擎的测试已分别在\ref{sec:hwcomposer测试}和\ref{sec:渲染引擎测试}中说明过。
+其中合成器引擎和渲染引擎的测试已分别在\ref{sec:合成引擎正确性测试}和\ref{sec:渲染引擎正确性测试}中说明过。
 由于 SurfaceFlinger 直接影响到 Android 系统中图形界面的渲染效果,因此SurfaceFlinger的测试设计非常全面，共计94个测试套件898个测试用例，确保系统能够顺畅运行。
 在AOSP下，对SurfaceFlinger的测试包含两个部分，一个是SurfaceFlinger的单元测试libsurfaceflinger\_unittest,另一个是SurfaceFlinger\_test。
 
@@ -333,7 +358,30 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 %     \label{fig:SurfaceFlinger_test测试截图}
 % \end{figure}
 
-\section{系统优化}
+
+% \section{系统优化}
+% 在上述方案实现中，Android gralloc实际上使用的是mesa提供的图形缓冲区管理接口。在3A5000上运行原生的Native程序，如bootanim，
+% 经测试，在一整个绘制的循环中，glswap所占用的时间超过70\%，而glswap的瓶颈在于访存。因此需要访存优化。
+
+% \subsection{访存优化}
+% LG110支持4✖4 Tile格式的访存优化，如表\ref{tab:颜色缓冲区流水线配置}。为gralloc后端添加bo_create_with_modifiers实现接口，
+
+% \begin{table}[h]
+%     \centering
+%     \caption{颜色缓冲区流水线配置}
+%     \label{tab:颜色缓冲区流水线配置}
+%     \begin{tabular}{lllp{3cm}}
+%       \toprule
+%       位域 & 名称 & 访问 & 描述 \\
+%       \midrule
+%       1:0 & tilem & RW & 0:线性格式 \newline
+%                         1: 4x4 的 Tile 格式 \newline
+%                         2: 8x8 的 Tile 格式\\
+%       \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+
 
 \section{性能分析}
 % bocreate 缓冲重用

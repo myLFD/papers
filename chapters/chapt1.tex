@@ -45,22 +45,22 @@ Android 的图形系统作为Android系统最基础最重要的模块之一，�
 以及高效的图形API支持，移动驱动通常支持 OpenGL ES 和 Vulkan，以实现高效的图形渲染。常见的移动设备的显卡驱动有ARM Mali驱动，
 Qualcomm Adreno 驱动，Imagination PowerVR 驱动，苹果 A 系列和 M 系列芯片。
 
-1.ARM Mali驱动：ARM Mali驱动是为ARM Mali GPU设计的一套图形处理单元驱动程序，它支持OpenGL ES、Vulkan、OpenCL等图形和计算接口，
+1.ARM Mali驱动\cite{ARM}：ARM Mali驱动是为ARM Mali GPU设计的一套图形处理单元驱动程序，它支持OpenGL ES、Vulkan、OpenCL等图形和计算接口，
 用于嵌入式设备和移动设备的图形处理。Mali GPU广泛应用于智能手机、平板电脑、智能电视和其他嵌入式系统。已有多个GPU系列产品的配套驱动，如
 Utgard、Midgard、Bifrost、Valhall等，同时有开源和闭源的驱动实现，开源实现由Panfrost、Lima等社区开发，
 而闭源实现则是由ARM 官方提供的 Mali GPU 驱动。
 
-2.Qualcomm Adreno 驱动：Qualcomm Adreno 是高通公司为其 Snapdragon 系列芯片设计的 GPU（图形处理单元），
+2.Qualcomm Adreno\cite{qualcomm} 驱动：Qualcomm Adreno 是高通公司为其 Snapdragon 系列芯片设计的 GPU（图形处理单元），
 广泛应用于智能手机、平板电脑和其他嵌入式设备。Adreno 驱动程序为这些设备提供图形渲染和计算能力，
 支持现代图形 API（如 OpenGL ES、Vulkan 和 OpenCL），用于运行复杂的图形和计算任务。
 如同Mali驱动一样，Adreno也有开源和闭源的实现。freedreno 是 Linux 社区开发的开源 Adreno 驱动，支持 OpenGL ES 和 Vulkan。
 闭源实现是由Qualcomm 提供，通常嵌入到 Android 中，提供完整的 GPU 功能支持和性能优化。
 
-3.Imagination PowerVR 驱动：应用于Imagination Technologies 的 PowerVR 系列 GPU，用以支持高效图形和计算解决方案以及
+3.Imagination PowerVR \cite{imaginationtech}驱动：应用于Imagination Technologies 的 PowerVR 系列 GPU，用以支持高效图形和计算解决方案以及
 延迟渲染架构（Deferred Rendering Architecture），并且提供提供高效的渲染性能和低功耗的特性。该驱动被用于许多移动设备，
 如部分 iPhone 和其他手机品牌。通常是闭源的，优化只针对特定硬件。
 
-4.苹果 A 系列和 M 系列芯片：适用于苹果自研的苹果的 A 系列和 M 系列芯片，A 系列主要用于 iPhone 和 iPad，
+4.苹果 A 系列和 M 系列芯片\cite{apple}：适用于苹果自研的苹果的 A 系列和 M 系列芯片，A 系列主要用于 iPhone 和 iPad，
 M 系列则主要用于 Mac 和 iPad，二者都基于 ARM 架构设计。该驱动程序针对苹果的硬件进行深度优化，
 以提供高性能、低功耗的图形处理能力。
 
@@ -79,7 +79,7 @@ M 系列则主要用于 Mac 和 iPad，二者都基于 ARM 架构设计。该驱
 由于安卓图形栈的性能与用户体验高相关，Google 本身也在对图形栈做一些优化。这一部分的优化主要是由Google公司完成。
 Android 4.1之后，Google 对 Android Display 系统进行了重构，实现了黄油工程（Project Butter）,在系统受到
 VSync pulse 后，马上开始下一帧的渲染，称为 drawing with VSync，让 CPU/GPU 有完整的时间来处
-理数据，减少了卡顿（jank），具体实现上引入了 Choreographer\cite{}。在 Android 7.0 版本之后，首次
+理数据，减少了卡顿（jank），具体实现上引入了 Choreographer\cite{google2012dev}。在 Android 7.0 版本之后，首次
 引入 Vulkan API，实现了低开销和高性能的特点，并且允许多线程同时提交工作到 GPU。相比较
 OpenGL ES，Vulkan 在性能提升、帧率提升、cpu 使用率等方面均有较大提升。在Android 9.0 版本中，引入了
 minigbm，旨在为 Android 提供更灵活的缓冲区管理，并用一种标准化的方式来管理和分配图形缓冲区，与 
