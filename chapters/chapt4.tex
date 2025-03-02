@@ -28,7 +28,7 @@
 由于是设备模块驱动的测试，需要通过内核的debugfs辅助测试，mount -t debugfs none debug挂载debug文件系统，对LG110的3个环形缓冲区进行测试，分别是
 ib、gfx、xdma,通过所有测试用例\ref{fig:内核驱动测试结果}
 
-\begin{figure}[h]
+\begin{figure}[H]
     \centering
     \includegraphics[width=0.8\textwidth]{内核驱动测试结果.png}
     \caption{内核驱动测试结果}
@@ -51,7 +51,7 @@ vm\_tests是虚拟内存ID测试集，测试了虚拟内存ID（VMID）预留机
 
 共21例测试用例全部通过测试。
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{libdrm\_gsgpu测试集}
     \label{tab:libdrm_gsgpu测试集}
@@ -95,7 +95,7 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
 
 测试用例分类如表\ref{tab:GrallocTypeGtest测试用例分类}
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{GrallocTypeGtest测试用例分类}
     \label{tab:GrallocTypeGtest测试用例分类}
@@ -117,7 +117,7 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
 
 经测试，已通过全部的21个测试套件共180个测试用例，结果如表\ref{tab:GrallocTypeGtest测试结果表}仅按测试套件名分类。
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{GrallocTypeGtest测试结果表}
     \label{tab:GrallocTypeGtest测试结果表}
@@ -150,7 +150,7 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
 
 \textbf{gralloc0测试用例}主要测试了内存缓冲区的分配与释放、图形缓冲区锁定与解锁、API版本的兼容性等,测试项、用例描述和结果如表\ref{tab:gralloc0测试集}。
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{gralloc0测试集}
     \label{tab:gralloc0测试集}
@@ -178,7 +178,7 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
 测试功能做简单归纳\ref{tab:libcompositionengine_test测试集}。可分为6个主要部分，显示设备管理、合成引擎测试、硬件合成器测试、输出层测试、
 渲染表面与空间映射和Planner策略模块测试，目前可以通过全部的测试用例。
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{libcompositionengine\_test测试集}
     \label{tab:libcompositionengine_test测试集}
@@ -214,7 +214,7 @@ OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲�
 \textbf{RenderEngineTest}是渲染管线测试，用于验证RenderEngine模块在不同场景下的正确性，确保图形层、颜色、阴影以及变换等操作正常工作，
 核心测试主要包括基础功能测试、高级渲染特性测试、缓冲区操作测试、异常与边界测试等，
 具体如表\ref{tab:RenderEngineTest测试分类}所示,276个测试用例全部通过。
-    \begin{table}[h]
+    \begin{table}[H]
         \centering
         \caption{RenderEngineTest测试分类}
         \label{tab:RenderEngineTest测试分类}
@@ -239,7 +239,7 @@ OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲�
 \textbf{RenderEngineThreadedTest}是渲染线程测试，用于验证RenderEngineThreaded在多线程环境下是否正确代理调用、处理异步操作及状态同步。
 测试覆盖如表\ref{tab:RenderEngineThreadedTest测试分类},并可以通过全部的19个测试用例。两个测试套件结果统计如表\ref{tab:librenderengine_test测试结果}
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{RenderEngineThreadedTest测试分类}
     \label{tab:RenderEngineThreadedTest测试分类}
@@ -260,7 +260,7 @@ OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲�
     \note{}
 \end{table}
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{librenderengine\_test测试结果}
     \label{tab:librenderengine_test测试结果}
@@ -290,7 +290,7 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 
 \textbf{libsurfaceflinger\_unittest}是安卓原生的测试集，58个测试套件共574个测试用例。如表\ref{tab:libsurfaceflinger_unittest测试分类},可将测试用例分为9个主要测试类别。
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{libsurfaceflinger\_unittest测试分类}
     \label{tab:libsurfaceflinger_unittest测试分类}
@@ -313,7 +313,7 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 \textbf{SurfaceFlinger\_test}也是安卓原生的GTest测试集，26个测试套件共324个测试用例。如表\ref{tab:SurfaceFlinger_test测试分类}所示，可分为10个主要测试类别。两个测试集结果统计如
 表\ref{tab:SurfaceFlinger测试结果}
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{SurfaceFlinger\_test测试分类}
     \label{tab:SurfaceFlinger_test测试分类}
@@ -335,7 +335,7 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
     \note{}
 \end{table}
 
-\begin{table}[h]
+\begin{table}[H]
     \centering
     \caption{SurfaceFlinger测试结果}
     \label{tab:SurfaceFlinger测试结果}
