@@ -293,19 +293,19 @@ DRM命令码与内核处理函数func的映射关系已在表\ref{tab:IOCTL命�
   \label{fig:ioctl def drv}
 \end{figure}
 
-\subsection{内存管理模块}
+% \subsection{内存管理模块}
 
-LG110的内存模型在小节\ref{sec:架构差异分析}和图\ref{fig:LG110内存模型}中已有相关说明。
-模块主要功能是管理GPU显存资源（GEM对象）的创建、映射、元数据操作及虚拟地址绑定等。
-其主要依赖GEM和TTM对缓冲区对象进行管理。
-GEM是内核中用于图形缓冲区管理的一个核心模块，特别是在与图形硬件（如 GPU）交互时。
-它是 DRM的一部分，旨在为图形硬件分配、管理和共享内存资源。GEM 的设计目的是简化内存管理，确保图形缓冲区的高效分配和使用，并且能够支持多种类型的设备和硬件架构。
-GEM 主要通过图形缓冲区的对象（drm\_gem\_object）来管理 GPU 和显示硬件之间的内存。TTM(Translation Table Manager)适用于GPU内存管理的一部分，
-提供了对显存、主存、共享内存等不同类型内存的管理功能。它通过一个通用的 API 提供内存分配、缓冲区对象管理和内存交换等功能，使得 GPU 驱动能够灵活管理图形资源。
-在GPU内存管理中实际上不关心纹理会被分配到哪个内存，GPU内存会使用BO缓冲区对象去作为GPU显存使用的最小单位。
-简单来说，GEM分配的显存对象底层drm\_gem\_object通过TTM的ttm\_buffer\_object管理物理内存。
+% LG110的内存模型在小节\ref{sec:架构差异分析}和图\ref{fig:LG110内存模型}中已有相关说明。
+% 模块主要功能是管理GPU显存资源（GEM对象）的创建、映射、元数据操作及虚拟地址绑定等。
+% 其主要依赖GEM和TTM对缓冲区对象进行管理。
+% GEM是内核中用于图形缓冲区管理的一个核心模块，特别是在与图形硬件（如 GPU）交互时。
+% 它是 DRM的一部分，旨在为图形硬件分配、管理和共享内存资源。GEM 的设计目的是简化内存管理，确保图形缓冲区的高效分配和使用，并且能够支持多种类型的设备和硬件架构。
+% GEM 主要通过图形缓冲区的对象（drm\_gem\_object）来管理 GPU 和显示硬件之间的内存。TTM(Translation Table Manager)适用于GPU内存管理的一部分，
+% 提供了对显存、主存、共享内存等不同类型内存的管理功能。它通过一个通用的 API 提供内存分配、缓冲区对象管理和内存交换等功能，使得 GPU 驱动能够灵活管理图形资源。
+% 在GPU内存管理中实际上不关心纹理会被分配到哪个内存，GPU内存会使用BO缓冲区对象去作为GPU显存使用的最小单位。
+% 简单来说，GEM分配的显存对象底层drm\_gem\_object通过TTM的ttm\_buffer\_object管理物理内存。
 
-TTM实际上是使用GEM实现内存管理框架，在GEM模块实现了龙芯自己的数据结构，主要场景包括将VRAM转移到RAM或者从RAM转移到VRAM，以及BO的映射以实现CPU的访问。
+% TTM实际上是使用GEM实现内存管理框架，在GEM模块实现了龙芯自己的数据结构，主要场景包括将VRAM转移到RAM或者从RAM转移到VRAM，以及BO的映射以实现CPU的访问。
 % 还是得写ttm模块，突出5.10内核结构不同等等。
 % \begin{figure}[h]
 %   \centering
@@ -313,8 +313,10 @@ TTM实际上是使用GEM实现内存管理框架，在GEM模块实现了龙芯�
 %   \caption{TTM主要对象}
 % \end{figure}
 
-
-\subsection{libdrm接口实现}
+在DRM框架中，libdrm是沟通和连接内核空间和用户空间的重要一环。它通过对多种ioctl底层接口进行封装，以向上提供通用的接口。
+用户空间的驱动可以通过libdrm提供的库函数与系统内核进行交互，从而访问底层资源。如图\ref{fig:内核驱动结构图}，
+libdrm\_gsgpu作为安卓用户空间的驱动程序，它会与底层的DRM内核驱动程序进行通信，
+从而完成配置、读取、传输、控制设备等多种行为。
 
 \begin{figure}[h]
   \centering
@@ -323,42 +325,37 @@ TTM实际上是使用GEM实现内存管理框架，在GEM模块实现了龙芯�
   \label{fig:内核驱动结构图}
 \end{figure}
 
-在DRM框架中，libdrm是沟通和连接内核空间和用户空间的重要一环。它通过对多种ioctl底层接口进行封装，以向上提供通用的接口。
-用户空间的驱动可以通过libdrm提供的库函数与系统内核进行交互，从而访问底层资源。如图\ref{fig:内核驱动结构图}，
-libdrm\_gsgpu作为安卓用户空间的驱动程序，它会与底层的DRM内核驱动程序进行通信，
-从而完成配置、读取、传输、控制设备等多种行为。
-
-在libdrm中，会通过drmCommandWriteRead封装的读写命令，对内核IOCTL实现进行调用。以gsgpu\_bo\_alloc为例，会在系统内存calloc一块BO缓冲区对象大小的内存，并通过
+在libdrm中，用户态实现的缓冲区对象操作的函数
+会通过drmCommandWriteRead封装的读写命令，对内核IOCTL实现进行调用。以gsgpu\_bo\_alloc为例，会在系统内存calloc一块BO缓冲区对象大小的内存，并通过
 drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为偏移值，以DRM\_COMMAND\_BASE作为基址获取命令编号，DRM\_IOCTL\_BASE作为操作类型，使用args的大小作为命令数据的大小，
-方向默认双向，向内核请求特定的IOCTL操作，随后使用ioctl执行系统调用，操纵DRM设备。libdrm中有关缓冲区对象操作的接口函数如表\ref{tab:libdrmBO接口表}，旁边是libdrm函数执行的内核调用的
-命令序号，通过上节的IOCTL实现，完成对DRM设备的特定操作。
+方向默认双向，向内核请求特定的IOCTL操作，随后使用ioctl执行系统调用，操纵DRM设备。由此，实现了从用户态调用DRM命令码对显卡设备的操作。
 
-\begin{table}[h]
-  \centering
-  \caption{libdrmBO接口表}
-  \label{tab:libdrmBO接口表}
-  \begin{tabular}{ll}
-    \toprule
-    libdrm实现  & 命令序号 \\
-    \midrule
-    gsgpu\_bo\_alloc& DRM\_GSGPU\_GEM\_CREATE  \\
-    gsgpu\_bo\_cpu\_map & DRM\_GSGPU\_GEM\_MMAP \\
-    gsgpu\_bo\_cpu\_unmap & / \\
-    gsgpu\_bo\_export & / \\
-    gsgpu\_bo\_free & / \\
-    gsgpu\_bo\_import & / \\
-    gsgpu\_bo\_list\_create & DRM\_GSGPU\_BO\_LIST \\
-    gsgpu\_bo\_list\_destroy & DRM\_GSGPU\_BO\_LIST \\
-    gsgpu\_bo\_list\_update & DRM\_GSGPU\_BO\_LIST \\
-    gsgpu\_bo\_query\_info & DRM\_GSGPU\_GEM\_OP|DRM\_GSGPU\_GEM\_METADATA \\
-    gsgpu\_bo\_set\_metadata & DRM\_GSGPU\_GEM\_METADATA \\
-    gsgpu\_bo\_va\_op\_raw & DRM\_GSGPU\_GEM\_VA \\
-    gsgpu\_bo\_wait\_for\_idle & DRM\_GSGPU\_GEM\_WAIT\_IDLE \\
-    gsgpu\_create\_bo\_from\_user\_mem & DRM\_GSGPU\_GEM\_USERPTR \\
-    \bottomrule
-  \end{tabular}
-  \note{}
-\end{table}
+% \begin{table}[h]
+%   \centering
+%   \caption{libdrmBO接口表}
+%   \label{tab:libdrmBO接口表}
+%   \begin{tabular}{ll}
+%     \toprule
+%     libdrm实现  & 命令序号 \\
+%     \midrule
+%     gsgpu\_bo\_alloc& DRM\_GSGPU\_GEM\_CREATE  \\
+%     gsgpu\_bo\_cpu\_map & DRM\_GSGPU\_GEM\_MMAP \\
+%     gsgpu\_bo\_cpu\_unmap & / \\
+%     gsgpu\_bo\_export & / \\
+%     gsgpu\_bo\_free & / \\
+%     gsgpu\_bo\_import & / \\
+%     gsgpu\_bo\_list\_create & DRM\_GSGPU\_BO\_LIST \\
+%     gsgpu\_bo\_list\_destroy & DRM\_GSGPU\_BO\_LIST \\
+%     gsgpu\_bo\_list\_update & DRM\_GSGPU\_BO\_LIST \\
+%     gsgpu\_bo\_query\_info & DRM\_GSGPU\_GEM\_OP|DRM\_GSGPU\_GEM\_METADATA \\
+%     gsgpu\_bo\_set\_metadata & DRM\_GSGPU\_GEM\_METADATA \\
+%     gsgpu\_bo\_va\_op\_raw & DRM\_GSGPU\_GEM\_VA \\
+%     gsgpu\_bo\_wait\_for\_idle & DRM\_GSGPU\_GEM\_WAIT\_IDLE \\
+%     gsgpu\_create\_bo\_from\_user\_mem & DRM\_GSGPU\_GEM\_USERPTR \\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
 
 \subsection{多版本适配方案设计}
 龙芯gsgpu内核驱动属于闭源状态，尚未整合到已有的内核源码，采用的方案为驱动模块独立开发的方式，这样设计有多个方面的好处，
@@ -504,18 +501,18 @@ drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为�
 \end{minipage}
 
 
-\section{GPU用户态驱动缓冲区管理实现}
-OpenGL ES的实现基于
-% \subsubsection{图形 API 支持}
-% 打通GPGPU后端支持Gallium3D的通路，确保 OpenGL 的核心功能集成到龙芯平台，确保API 的正确性。
+\section{GPU用户态驱动实现}
 
-\subsection{gallium实现及接口}
-当前Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Gallium3D 框架），另一部分是新的Gallium驱动。 
-经典驱动由于采用紧耦合架构设计，存在功能模块化程度较低的局限性，当需要适配新型图形接口标准（如Direct3D/Vulkan）时往往需要进行大量代码重构。
-为解决这一技术瓶颈，Gallium3D框架通过构建面向现代GPU硬件特性的通用抽象层，将图形API实现与硬件驱动解耦，使得不同图形接口可在统一架构基础上进行扩展开发。
-该框架特别将硬件适配层与操作系统交互模块进行分离设计，通过平台适配模块独立化实现了跨系统兼容能力，显著提升了驱动开发效率和可维护性。目前已经有许多
-驱动被移植到伽利略架构上了，包括nouveau（这个是面向NVIDIA的开源驱动），各种radeon驱动，以及一些软件驱动（swrast, llvmpipe）等。
-龙芯显卡正是在此架构上实现的。
+龙芯现有的驱动实现基于mesa的gallium架构。
+gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
+state tracker是状态跟踪器，负责将将高级图形API的调用转换为Gallium内部的具体的管道操作。
+而驱动层是直接与GPU硬件交互的部分，负责硬件指令生成，就是将Gallium的中间命令转换为GPU特定的指令集；着色器编译，将NIR中间表示编译为GPU原生代码，并进行优化；
+资源管理，分配显存、管理纹理和缓冲区对象；命令提交，构建命令缓冲区，并通过winsys提交到硬件队列等。这是硬件特性的最直接体现，它和state tracker组成了
+gallium架构下实现OpenGL ES功能的核心组件。
+而winsys层主要包括显存管理、命令提交与同步、显示输出管理和操作系统平台适配上。因此本课题主要实现在于winsys层模块的部分重构，而OpenGL ES实现复用
+驱动层的实现即可。
+
+\subsection{缓冲区对象管理实现}
 
 Gallium Winsys 框架 是 Gallium 驱动框架中的一部分，旨在抽象化硬件和操作系统的差异，提供一个统一的接口来管理底层硬件资源（如缓冲区、上下文、内存等）。
 它主要服务于图形硬件驱动和 GPU 资源管理，简化了不同平台之间的图形驱动开发。winsys中的关键操作包括缓冲区管理，内存映射，上下文管理，显示同步等。
@@ -543,8 +540,6 @@ winsys缓冲区管理接口包括\ref{tab:winsys缓冲区管理接口表}
   \end{tabular}
   \note{}
 \end{table}
-
-\subsection{缓冲区对象（BO）管理}
 
 \subsubsection{显式分配}
 
@@ -608,6 +603,45 @@ BO映射重要一步就是缓冲区的同步，在读取纹理数据、动态更
 % 3. 释放硬件缓冲区（gsgpu_bo_free）
 % 4. 清理围栏数组（gsgpu_bo_remove_fences）
 % 5. 更新内存统计（allocated_vram/gtt）
+
+\subsection{构建安卓OpenGL ES支持}
+
+已知复用mesa的driver层实现，因此本节仅描述如何构建安卓OpenGL ES支持，并简述目标动态安装库。
+mesa使用的版本为18.3.6,而由于现有的安卓版本为12.0.0,安卓API版本为31对应的mesa版本为20.3.4,因此需要对现有的mesa的dri接口进行升级。并且由于安卓新的
+编译方式Soong的加入，mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用伪编译的方式。为考虑后续版本的兼容性，因此在现有的mesa18.3.6上采用伪编译的方法，
+使用mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。此后，mesa库将被编译为libgallium\_dri.so以及libglapi.so。其中libgallium\_dri.so
+用于支持DRI使得应用程序可以直接与GPU进行通信，绕过X服务器从而实现更高效的渲染；同时实现多个图形API，包括OpenGL,利用Gallium3D的架构来支持gsgpu的后端。而libglapi.so
+则负责管理OpenGL API调用的分发，将调用路由到适当的实现，通常是后端的图形驱动程序并且处理OpenGL上下文的创建、管理和切换，确保正确的状态和资源在不同的渲染上下文中得到维护。
+由此背景，可以分析得到以下数个方面。
+
+由于mesa是一个开源的OpengGL实现，提供了多种GPU硬件的驱动支持，因此代码提交量极大。而mesa原生编译框架使用的是ninja,而Android中使用的是Makefile,直接编译生成目标动态库文件，
+与原生ninja并无关系，因此需要使用伪编译框架去生成动态库文件，即用cross-compile配置mesa交叉编译脚本aosp-cross,再使用原生ninja编译规则生成目标安装目录install，
+将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯mesa版本提供支持。
+
+mesa编译框架如图\ref{fig:mesa编译框架},AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的mesa交叉编译规则，
+按照mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{mesa编译框架.jpg}
+  \caption{mesa编译框架}
+  \label{fig:mesa编译框架}
+\end{figure}
+
+目标安装动态库说明：
+
+libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
+
+libGLESv1\_CM.so.1.1.0，是一个用于实现 OpenGL ES 1.x（特别是 OpenGL ES 1.1 和 OpenGL ES 1.0）功能的共享库），负责将 OpenGL ES 1.x 请求转换为 GPU 可执行的指令；
+
+libGLESv2.so.2.0.0，是一个提供 OpenGL ES 2.x 功能的共享库，用于支持 OpenGL ES 2.x（及以上版本）的图形渲染，提供了着色器的支持等；
+
+libglapi.so.0.0.0，提供 OpenGL API 调用 的代理功能，使得 OpenGL 函数调用可以通过动态链接的方式，调用不同的 OpenGL 实现库；
+
+以及为了支持gralloc的功能需要安装的libgbm\_mesa.so.1.0.0，提供GBM（Generic Buffer Management）接口的实现，主要用于管理图形缓冲区；
+
+libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastructure (DRI) 驱动程序实现。
+
+上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务调用。
 
 \section{基于龙芯显卡的安卓图形硬件抽象层实现}
 
@@ -786,10 +820,10 @@ Android自身提供了共享内存的机制，native\_handle\_t是一个用于�
   \note{}
 \end{table}
 
-\subsubsection{gralloc后端模块}
+\subsubsection{龙芯硬件支持}
 其中最重要的三个方法就是init、bo create 和bo map，下面将简要描述三个方法的过程。
 
-1.驱动初始化（init）
+1）驱动初始化（init）
 
 在驱动程序初始化时，这就需要设置不同的缓冲区格式和使用场景组合。在drv的数据结构中定义了一组向量用于存放定义的缓冲区格式及用途，
 可以使用drv\_add\_combinations、drv\_add\_combination 和 drv\_modify\_combination）这几个函数来配置存放的图形驱动的缓冲区管理设置。
@@ -817,7 +851,7 @@ Android自身提供了共享内存的机制，native\_handle\_t是一个用于�
   \note{}
 \end{table}
 
-2.缓冲区创建（bo create）
+2）缓冲区创建（bo create）
 
 如果是首次创建缓冲区时，需要先初始化并获取一个GbmMesaDriver的实例，使用shared\_ptr存放该实例。在创建时首先需要检查GPU是否需要KMS，
 因为一些GPU具有独立的显示控制器，而在龙芯显卡上显示控制器不是独立的。
@@ -855,78 +889,38 @@ DRM\_FORMAT\_XRGB8888,DRM\_FORMAT\_ARGB8888,cursor仅支持DRM\_FORMAT\_ARGB8888
 并在上述步骤完成后可以通过文件描述符对缓冲区进行处理，因此销毁gbm缓冲区对象及时释放资源。gbm中的缓冲区创建等实现实际上是基于直接渲染架构DRI,在创建dri device时，
 会搜索目标路径下的所有驱动（本课题使用的是gallium框架实现的驱动）并加载。具体实现会在用户态驱动实现中说明。
 
-% \begin{algorithm}[H]
-%   \SetAlgoLined
-%   \KwData{gralloc\_buffer\_descriptor，native\_handle\_t}
-%   \KwResult{int32\_t}
-%   allocate(){\\
-%   DRM驱动初始化检查\;
-%   ... \\
-%   Hal格式与DRM格式检查\;
-%   Driver->allocate\;  \tcp{调用驱动的allocate方法} 
-%   句柄转换native\_handle\_t 转换成gralloc\_handle\_t\;
-%   outHandle设置结果输出\;
-%   }
-%   \caption{allocate}
-%   \label{algo:allocate}
-% \end{algorithm}
-
-3.缓冲区映射（bo map）
+3）缓冲区映射（bo map）
 
 需要将一个图形缓冲区（bo）映射到用户空间，首先需要通过验证缓冲区的标志，该缓冲区需要有可以被软件访问的标志位，如果没有表示该缓冲区不能映射到用户空间。获取相关的驱动并设置映射的参数，
 以获取wrapper层对缓冲区操作的各种函数。在设置完缓冲区映射的大小、缓冲区的格式宽度高度之后，调用wrapper层的map方法来映射缓冲区。该map方法调用gbm\_bo\_map接口,该接口将调用底层
 实际的缓冲区映射操作。
 
-\subsubsection{gralloc前端模块}
+\subsubsection{缓存分配与复用}
+%缓冲区同步
 
-1.Allocator模块：
+本地存储缓冲区和句柄的结构是两个哈希表，一个用于对gralloc\_handle\_t和gralloc\_imported\_handle\_info进行哈希映射，
+info包含缓冲区和该句柄引用该缓冲区的数量，用于支持对已注册缓冲区句柄的多次访问支持。另一个对句柄id和缓冲区进行哈希映射以实现快速访问。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{handle-buffer存储哈希表.jpg}
+  \caption{handle-buffer存储哈希表}
+  \label{fig:handle-buffer存储哈希表}
+\end{figure}
+
+1）Allocator模块：
 由HAL的设计可知，IAllocator中对于allocate方法的定义为
 allocate(BufferDescriptor descriptor, uint32\_t count) generates (Error error, uint32\_t stride, vec<handle> buffers);
 该方法根据 BufferDescriptor描述符分配指定数量（count）的图形缓冲区，返回原始句柄数组、行步长（stride）及错误状态,其设计需兼顾 硬件适配性、资源管理 及 跨层级数据传递。
 方法中的generates表明需要实现一个异步回调接口，descriptor缓冲区描述符是Mappper模块实现的对缓冲区数据结构的序列化后的二进制字节流，基本类型为
 uint8\_t。这是安卓为了跨进程传输所设计，也是因为HIDL接口不支持直接传递复杂结构体（如嵌套对象或动态类型），只能支持基本类型和数组。
-count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体的实现时会重载增加hidlCb参数以实现异步回调的功能。算法设计如\ref{algo:allocate}
-
-\begin{algorithm}
-  \SetAlgoLined
-  \KwData{descriptor，count，hidlCb}
-  \KwResult{error,stride,handles}
-    \If{mDriver is not initialized}{error $\gets$ Error::NO\_RESOURCES} \tcp{mDriver是支持龙芯驱动的抽象数据结构}
-    decode(descriptor) \tcp{反序列化缓冲区描述符} 
-    handles.resize(count); \tcp{handles数量扩充至count}
-    \For{i:=0 To count-1}{
-      loongDescriptor $\gets$ convertDescriptor(descriptor) \tcp{转换数据结构描述符}
-      \If{not mDriver.is\_supported(loongDescriptor)}{error $\gets$ Error::UNSUPPORTED}
-      ret $\gets$ mDriver.allocate(loongDescriptor,handle)
-      \If{ret}{error $\gets$ Error::NO\_RESOURCES}
-      error = initialize\_metadata(loongHandle, loongDescriptor)\;
-        \If {error != Error::NONE}{
-          \tcp{释放当前 handle}
-          mDriver.release(nativeHandle)\;
-          native\_handle\_close(nativeHandle)\;
-          native\_handle\_delete(nativeHandle)\;
-          \tcp{回滚：释放已分配的所有 handles}
-          \For{j:0 To i}{
-              mDriver.release(handle[j].NativeHandle)\;
-          }
-          return Void()\;
-        }
-        handles[i] $\gets$ handle\;
-    }
-      \tcp{回调成功分配的句柄和步长}
-      hidlCb(Error::NONE,stride,handles)\;
-      \tcp{释放所有的 handles}
-      \For{handle in handles}{
-        mDriver.release(handle.NativeHandle)\;
-      }
-      return Void()\;
-  \caption{allocate}
-  \label{algo:allocate}
-\end{algorithm}
-
-其中convertDescriptor是将上层传入的通用描述符转换成龙芯的描述符,由于在安卓的HAL层的DRM\_FORMAT以及缓冲区标志符的命令有所不同，所以需要先进行转换
-才能判断对当前缓冲区格式是否支持。可以得出如下的格式转换表\ref{tab:HAL格式转换表}和缓冲区标志转换表\ref{tab:缓冲区标志转换表},
-此处仅列出一些常用和目前课题硬件支持的格式。
+count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体的实现时会重载增加hidlCb参数以实现异步回调的功能。
+需要先对gralloc后端驱动进行检查，若未完成初始化，则返回NO\_RESOURCES表示无硬件资源的错误。若驱动已完成初始化，则进行描述符转换，
+将HAL层驱动传入的uint8\_t类型的descriptor解码成缓冲区数据结构体BufferDescriptorInfo类型的description。同样，若是接码出现异常则需要
+返回BAD\_DESCRIPTOR表示描述符错误。由于上层接口有着count数量的缓冲区进行处理，因此需要初始化一个handle向量用于存储多个句柄。
+下面针对单个缓冲区的分配进行描述。接码的description中信息需要转换，convertDescriptor就是是将上层传入的安卓HAL描述符转换成底层通用的描述符。
+如安卓的HAL层的DRM\_FORMAT以及缓冲区标志符的命令有所不同，所以需要先进行转换以添加对当前缓冲区格式是否支持的判断。
+可以设计出如下的格式转换表\ref{tab:HAL格式转换表}和缓冲区标志转换表\ref{tab:缓冲区标志转换表},此处仅列出一些常用和目前课题硬件支持的格式。
 
 \begin{table}[H]
   \centering
@@ -966,74 +960,95 @@ count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体
   \note{}
 \end{table}
 
-
-Mapper模块：同样，IMapper中的方法最主要的是importBuffer、lock、set（实现对元数据的支持）。其中importBuffer方法定义为
-importBuffer(handle rawHandle) generates (Error error, pointer buffer);
-该方法是将一个原始缓冲区句柄（rawHandle）转换为可在当前进程内安全使用的导入缓冲区句柄。
-原始句柄可能来自跨进程传递或克隆操作，直接使用可能存在安全或有效性风险，需通过导入过程生成合法句柄。
-在导入过程中需要注意原始句柄的无效性以及错误处理等。算法如\ref{alg:importBuffer}。
+而在此基础上，需要调用驱动的的单个allocate方法，以传入的description缓冲区结构信息实现handle句柄的创建。如果创建失败，则需要释放后端驱动资源以及
+回滚已分配的所有handle以保证数据的一致性,主要是使用native\_handle\_close和native\_handle\_delete请除当前句柄的资源，并获取已分配至handles向量中的
+所有句柄进行清空缓冲区的操作。若创建成功，则继续初始化元数据Metadata的信息，这个主要是为一些优化方法提供支持。
+如果都创建成功则使用handle的setTo方法将创建成功的handle句柄添加至handles向量作为分配缓冲区成功的结果。
+而驱动的allocate的算法设计如\ref{algo:GRALLOC_DRIVER::ALLOCATE}，主要是使用上一节所述的支持龙芯的gralloc后端方法完成缓冲区的创建,获取宽、高、格式、步长、压缩标志等信息用于
+初始化handle句柄并创建gralloc\_buffer等。
 
 \begin{algorithm}
+  \caption{GRALLOC\_DRIVER::ALLOCATE}
+  \label{algo:GRALLOC_DRIVER::ALLOCATE}
+  \SetAlgoLined
+  \KwIn{descriptor}
+  \KwOut{out\_handle}
+  \SetKwProg{Fn}{Function}{}{}
+  \Fn{allocate(descriptor, out\_handle)}{
+      \tcp{1. 格式解析与对象创建}
+      \If{get\_resolved\_format\_and\_use\_flags() 失败}{\Return $-EINVAL$}
+      \If{drv\_bo\_create() 失败}{\Return 错误码}
+      \tcp{2. 句柄初始化}
+      计算 num\_fds/num\_ints\;
+      创建 hnd 并初始化 fds 为 -1\;
+      \tcp{3. 平面数据填充}
+      \For{每个平面}{
+          填充 fd/stride/offset/size\;
+          \If{失败}{Goto {destroy}}
+      }
+      \tcp{4. 保留区处理}
+      \If{需要保留区 \&\& create\_reserved\_region() 失败}{Goto {destroy}}
+      \tcp{5. 元数据与全局管理}
+      hnd.id $\leftarrow$ 原子递增\;
+      填充其他元数据\;
+      \If{创建 buffer 失败}{Goto {destroy}}
+      加锁插入全局表\;
+      *out\_handle $\leftarrow$ hnd\;
+      \Return 0\;
+      \tcp{6. 失败逻辑处理}
+      Destroy : 
+          清理句柄/bo\;
+          \Return 错误码\;
+  }
+  \end{algorithm}
+
+2）Mapper模块：同样，IMapper中的方法有importBuffer、lock、set（实现对元数据的支持）等。其中最重要的方法莫过于导入缓冲区方法importBuffer，
+是缓冲区重用的核心方法。该方法定义为importBuffer(handle rawHandle) generates (Error error, pointer buffer);
+是将一个原始缓冲区句柄（rawHandle）转换为可在当前进程内安全使用的导入缓冲区句柄。
+原始句柄可能来自跨进程传递或克隆操作，直接使用可能存在安全或有效性风险，需通过导入过程生成合法句柄。
+同样需要对后端驱动进行检查，流程与allocate方法类似，之后通过getNativeHandle方法获取本地native\_handle\_t句柄，
+并且为了确保跨进程的资源独立性，使用native\_handle\_clone复制句柄。
+随后使用retain方法从句柄中导入缓冲区对象。若retain失败，需要对复制的句柄调用
+native\_handle\_close和native\_handle\_delete关闭并清空资源，并返回NO\_RESOURCES表示无资源错误。
+成功则返回导入的缓冲区指针。
+retain方法需要先查看当前句柄是否存在于handles\_中，若存在则修改该句柄指向的缓冲区并修改引用计数，返回表示当前句柄已导入缓冲区。
+随后查看当前缓冲区哈希表是否存在于buffers\_中（可能被其他进程引用），若有直接修改引用计数，并将新句柄加入handles\_变量即可，没有则需要
+导入一个新的缓冲区。算法如\ref{algo:RETAIN}。
+
+% 同时，由于是共享缓冲区设计，所以在导入过程中需要处理一致性等冲突，以及原始句柄的无效性以及错误处理等。
+
+\begin{algorithm}
+\caption{GRALLOC\_DRIVER::RETAIN}
+\label{algo:RETAIN}
 \SetAlgoLined
-\KwIn{handle: hidl\_handle}
-\KwOut{error: Error, importedHandle: native\_handle\_t}
-\If{mDriver is not initialized}{
-    \textbf{log error} "Driver uninitialized"\;
-    \Return{(Error.NO\_RESOURCES, \text{null})}\;
+\KwIn{缓冲区句柄 $handle$}
+\KwOut{状态码 (0=成功)}
+\BlankLine
+加互斥锁 $mutex\_$\;
+$hnd \leftarrow$ 转换句柄\;
+\If{转换失败}{
+    \Return{无效句柄错误}\;
 }
-rawHandle $\gets$ handle.getNativeHandle()\;
-\If{rawHandle is null \textbf{or} rawHandle.numFds $= 0$}{
-    \textbf{log error} "Bad handle"\;
-    \Return{(Error.BAD\_BUFFER, \text{null})}\;
-}
-clonedHandle $\gets$ native\_handle\_clone(rawHandle)\;
-\If{clonedHandle is null}{
-    \textbf{log error} "Clone failed"\;
-    \Return{(Error.NO\_RESOURCES, \text{null})}\;
-}
-\textbf{Acquire mutex lock}\;
-hnd $\gets$ convert\_handle(clonedHandle)\;
-\If{hnd is null}{
-    \textbf{log error} "Invalid handle format"\;
-    \textbf{Release mutex lock}\;
-    native\_handle\_close(clonedHandle)\;
-    native\_handle\_delete(clonedHandle)\;
-    \Return{(Error.BAD\_BUFFER, \text{null})}\;
-}
-\If{hnd $\in$ handles\_}{
-    \tcp{Handle已注册，直接增加引用计数}
-    handles\_[hnd].refcount $\gets$ handles\_[hnd].refcount +1\;
-    \textbf{Release mutex lock}\;
-    \Return{(Error.NONE, clonedHandle)}\;
-}
-\If{hnd.id $\in$ buffers\_}{
-    \tcp{Buffer已存在，增加其引用计数}
-    buffer $\gets$ buffers\_[hnd.id]\;
-    buffer.refcount $\gets$ buffer.refcount +1\;
+\If{handle已注册}{
+    增加buffer和handle引用计数\;
+    \Return{成功}\;
 }
 \Else{
-    \tcp{新导入Buffer}
-    data $\gets$ populate\_import\_data(hnd)\; \tcp{填充fds/stride等元数据}
-    bo $\gets$ drv\_bo\_import(driver, data)\;
-    \If{bo is null}{
-        \textbf{Release mutex lock}\;
-        native\_handle\_close(clonedHandle)\;
-        native\_handle\_delete(clonedHandle)\;
-        \textbf{log error} "Import failed"\;
-        \Return{(Error.NO\_RESOURCES, \text{null})}\;
+    \If{对应buffer存在}{
+        增加buffer引用计数\;
     }
-    buffer $\gets$ create\_cros\_gralloc\_buffer(bo, hnd)\;
-    buffers\_[hnd.id] $\gets$ buffer\;
+    \Else{
+        导入新buffer数据\;
+        \If{导入失败}{
+            \Return{驱动错误}\;
+        }
+        创建buffer对象并注册\;
+    }
+    注册新handle和buffer对象\;
+    \Return{成功}\;
 }
-\tcp{注册新Handle}
-handles\_[hnd] $\gets$ \{buffer, refcount=1\}\;
-\textbf{Release mutex lock}\;
-\Return{(Error.NONE, clonedHandle)}\;
-\caption{importBuffer}\label{alg:importBuffer}
+释放互斥锁\;
 \end{algorithm}
-
-lock方法定义为lock(pointer buffer,uint64\_t cpuUsage,Rect accessRegion,handle acquireFence) generates (Error error,pointer data);
-lock 方法用于将图形缓冲区锁定，以便 CPU 直接访问其内存内容。主要用于支持多种访问模式（读/写）和区域限制，并处理并发访问的同步问题。
 
 \subsection{HIDL接口设计与实现}
 为了实现绑定式的HAL，需要先根据Android定义的硬件接口规范，使用HIDL语言编写xml文件。编译器会通过该部分的bp文件中定义的vintf\_fragments规则(实际上指向的就是该xml文件),将该
@@ -1048,101 +1063,7 @@ VINTF 文件中的信息会与设备上已安装的 HAL 实现进行对比以验
 是与内存分配器相关的接口，instance元素表示接口的实例名称是 default，通常 HAL 可以有多个实例，但这里指定的是默认实例。而Mapper仅在<transport>子项有所区别，由于Mapper实现的是
 直通式，所以是passthrough，且包含arch元素为32+64,表示该接口支持 32 位和 64 位架构。
 
-% 1.gbm包装模块
-% 用于在使用 Mesa 和 GBM（Generic Buffer Management）时对显存缓冲区（BO，Buffer Object）进行创建、映射、导入和销毁的操作。它通过封装与 GBM API 的交互，
-% 简化了底层内存管理，并与 Android 环境中的驱动配合。实现了以下4个功能模块：
-% \textbf{缓冲区分配与管理}:缓冲区可用于多种渲染操作
-
-% \textbf{跨平台支持}：用于纹理处理等操作
-
-% \textbf{优化内存访问}：表示与软件处理相关
-
-% 缓冲区分配与管理: 通过封装 GBM 的创建、导入、映射和销毁操作，实现了对缓冲区对象的管理，方便与其他模块进行交互。
-
-% 跨平台支持: 代码通过不同的条件编译支持在多种架构（如 x86\_64、ARM 等）上的适配，特别是不同平台上缓冲区的对齐和映射步长差异。
-
-% 优化内存访问: 在导入缓冲区时，确保正确的映射步长（map\_stride）处理，避免不同驱动和硬件上的差异，保证高效内存访问。
-
-% 调试与日志: 通过 ALOGE 和 ALOGV 等宏进行调试输出，帮助开发人员调试 GBM 缓冲区分配和管理过程。
-
-% gralloc模块分为HAL服务实现(可以称为gralloc前端)，gbm接口实现模块和gbm包装层（可以称为gralloc后端）。前端已有部分开源代码实现，因此可以使用公共层的代码，
-% 相应的，本课题只需要实现后端代码，即gbm的接口对接和封装等。
-
-% 由于上层应用是通过gralloc获取实际的图像缓冲描述句柄，而由于不同进程使用图像缓冲区的目的不同。如UI进程是为了渲染画面并传送给SurfaceFlinger进行合成，而SurfaceFlinger是
-% 要在自己的缓冲区上合成帧画面并送显，因此图像缓冲区的类型往往不同。
-
-% \textbf{BO\_USE\_RENDER\_MASK}:缓冲区可用于多种渲染操作
-
-% \textbf{BO\_USE\_TEXTURE\_MASK}：用于纹理处理等操作
-
-% \textbf{BO\_USE\_SW\_MASK}：表示与软件处理相关
-
-% \textbf{BO\_USE\_GPU\_HW}：与GPU硬件加速相关
-
-% \textbf{BO\_USE\_NON\_GPU\_HW}:表示与非GPU硬件加速相关
-
-% \textbf{BO\_USE\_HW\_MASK}:表示与所有硬件相关
-
-% 缓冲区对象buffer object数据结构
-
-% drmformat转换、回调框架说明、gralloc直通式等
-
-% 依据硬件的设计可以选择在初始化时是否使用tiled等模式进行访存优化，提供更灵活的驱动交互方式。
-
-% \section{HAL优化}
-% 在上述方案实现中，Android gralloc实际上使用的是mesa提供的图形缓冲区管理接口。在3A5000上运行原生的Native程序，如bootanim，
-
-% \subsection{接口优化}
-% 在实际的测试中发现由于调用栈过长导致访存成为瓶颈。
-% 现重构gbm后端实现以实现对libdrm和DRI驱动的直接调用。
-
-% createImageWithModifiers
-
-% \subsection{tile访存优化}
-
-
-\section{系统镜像构建}
-
-\subsection{龙芯OpenGL ES驱动构建}
-
-mesa使用的版本为18.3.6,而由于现有的安卓版本为12.0.0,安卓API版本为31对应的mesa版本为20.3.4,因此需要对现有的mesa的dri接口进行升级。并且由于安卓新的
-编译方式Soong的加入，mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用伪编译的方式。为考虑后续版本的兼容性，因此在现有的mesa18.3.6上采用伪编译的方法，
-使用mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。此后，mesa库将被编译为libgallium\_dri.so以及libglapi.so。其中libgallium\_dri.so
-用于支持DRI使得应用程序可以直接与GPU进行通信，绕过X服务器从而实现更高效的渲染；同时实现多个图形API，包括OpenGL,利用Gallium3D的架构来支持gsgpu的后端。而libglapi.so
-则负责管理OpenGL API调用的分发，将调用路由到适当的实现，通常是后端的图形驱动程序并且处理OpenGL上下文的创建、管理和切换，确保正确的状态和资源在不同的渲染上下文中得到维护。
-由此背景，可以分析得到以下数个方面。
-
-由于mesa是一个开源的OpengGL实现，提供了多种GPU硬件的驱动支持，因此代码提交量极大。而mesa原生编译框架使用的是ninja,而Android中使用的是Makefile,直接编译生成目标动态库文件，
-与原生ninja并无关系，因此需要使用伪编译框架去生成动态库文件，即用cross-compile配置mesa交叉编译脚本aosp-cross,再使用原生ninja编译规则生成目标安装目录install，
-将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯mesa版本提供支持。
-
-mesa编译框架如图\ref{fig:mesa编译框架},AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的mesa交叉编译规则，
-按照mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{mesa编译框架.jpg}
-  \caption{mesa编译框架}
-  \label{fig:mesa编译框架}
-\end{figure}
-
-目标安装动态库说明：
-
-libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
-
-libGLESv1\_CM.so.1.1.0，是一个用于实现 OpenGL ES 1.x（特别是 OpenGL ES 1.1 和 OpenGL ES 1.0）功能的共享库），负责将 OpenGL ES 1.x 请求转换为 GPU 可执行的指令；
-
-libGLESv2.so.2.0.0，是一个提供 OpenGL ES 2.x 功能的共享库，用于支持 OpenGL ES 2.x（及以上版本）的图形渲染，提供了着色器的支持等；
-
-libglapi.so.0.0.0，提供 OpenGL API 调用 的代理功能，使得 OpenGL 函数调用可以通过动态链接的方式，调用不同的 OpenGL 实现库；
-
-以及为了支持gralloc的功能需要安装的libgbm\_mesa.so.1.0.0，提供GBM（Generic Buffer Management）接口的实现，主要用于管理图形缓冲区；
-
-libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastructure (DRI) 驱动程序实现。
-
-上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务（如SurfaceFlinger）等使用。
-
-
-\subsection{安卓系统镜像定制}
+\section{安卓系统镜像定制}
 由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit, MMU）采用页式管理来处理 GPU 所使用的内存，
 所有内部功能模块均使用虚拟地址。在连接到内部网络之前，这些地址需要经过转换。当前，MMU 设计了三级页表结构，且页大小（page size）为 16KB。
 然而，Android 12 尚未支持 16KB 的页大小。这意味着需要对以下几个方面进行修改：
@@ -1158,7 +1079,7 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 
 % \subsection{内核编译\&bionic\&部分系统服务修改说明}
 
-\subsubsection{内核定制}
+\subsection{内核定制}
 本课题所使用的内核是安卓通用内核5.10,因此在编译时需要添加安卓特性相关的驱动支持如ASHMEM、BINDERFS、BINDERIPC等。
 考虑到需要实现对龙芯显卡的支持，在内核编译时需要将loonggpu/lg100\_cp.bin通过CONFIG\_EXTRA\_FIRMWARE选项指定并使用CONFIG\_EXTRA\_FIRMWARE\_DIR指定固件所在的
 位置。由于LG110硬件设计上的限制，因此虚拟内存管理只能使用三级页表，页表大小为16Kb。现需要将内核部分模块做硬件适应性修改，如f2fs模块等，
@@ -1181,13 +1102,13 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
   \note{}
 \end{table}
 
-\subsubsection{根文件系统定制}
+\subsection{根文件系统定制}
 安卓文件系统需要定制的部分可分为bionic和部分系统服务。这两个部分的适配的动机与内核类似，
 具体实现可以在bionic/libc/platform/bionic/page.h中实现一个内联page\_size()的函数用以实现从内核
 中动态获取页表大小，并以此为适配有使用PAGE\_SIZE为4k相关的服务,累积完成40余处的修改。这个函数实现是用getauxval来获取与进程相关的辅助值（auxiliary vector values），而
 辅助向量是内核传递给程序的额外信息，通常是在程序启动时传递给它的，用于提供关于系统环境的各种信息。AT\_PAGESZ就是辅助向量常量之一，用于查询系统的页面大小，如算法\ref{algo:获取内核页面大小}
 同时，由于Android12中有大量的系统服务依然在使用PAGE\_SIZE宏，因此对相关系统服务做一些适应性修改在所难免，如图\ref{fig:androidS 16k适配改动图}
-\begin{algorithm}[H]
+\begin{algorithm}
   \SetAlgoLined
   \KwData{void}
   \KwResult{size\_t}
@@ -1203,7 +1124,7 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
   \label{algo:获取内核页面大小}
 \end{algorithm}
 
-\begin{figure}[h]
+\begin{figure}
   \centering
   \includegraphics[width=0.8\textwidth]{androidS 16k适配改动图.jpg}
   \caption{龙芯androidS 16k适配改动图}
@@ -1232,69 +1153,7 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 % soft_reset	gsgpu_common_soft_reset	软复位函数，用于在某些情况下重置模块，而无需对整个系统进行硬复位。
 % \subsection{gralloc}
 
-% 1. Allocator
-% Allocator 负责内存的分配和释放，主要功能包括：
-
-% 内存分配：
-% 分配一块合适大小的内存区域，通常用于图形缓冲区（如帧缓冲、纹理等）。
-% 格式支持：
-% 支持多种像素格式（如 RGBA、YUV 等），确保分配的内存符合所需的格式和对齐要求。
-% 内存管理：
-% 管理可用内存的状态，跟踪已分配和未分配的内存区域，确保内存的高效使用。
-% 性能优化：
-% 通过优化内存分配策略（如缓存机制、批量分配等），提高图形性能。
-% 2. Mapper
-% Mapper 负责内存的映射和访问，主要功能包括：
-
-% 地址转换：
-% 将分配的内存地址转换为应用程序可用的地址，确保应用能够正确访问相应的内存区域。
-% 映射和解除映射：
-% 提供映射和解除映射的功能，允许应用在需要时将内存映射到其地址空间，使用完毕后解除映射。
-% 共享内存管理：
-% 支持不同进程之间共享内存，通过 Mapper，多个应用能够高效地访问同一块内存，减少内存复制的开销。
-% 权限控制：
-% 管理对内存的访问权限，确保只有经过授权的进程能够访问特定的内存区域。
-
-% __DRI_IMAGE_PRIME_LINEAR_BUFFER
-% front_rendering_usage __DRI_IMAGE_USE_FRONT_RENDERING 
-% 两个扩展新特性可以写一写
-% 1. EGL_EXT_image_dma_buf_import
-% 功能：允许从 DMA-BUF 导入图像，以实现跨设备的缓冲区共享。
-% 应用场景：在多 GPU 系统或使用不同硬件加速的情况下，支持高效的缓冲区共享。
-% 2. EGL_ANDROID_image_native_buffer
-% 功能：提供对 Android 原生图像缓冲区的支持，允许将图像直接与 Android 的图形系统进行交互。
-% 应用场景：用于 SurfaceFlinger、硬件加速的视频播放和图形应用中。
-% 3. EGL_ANDROID_surface_texture
-% 功能：允许将 SurfaceTexture 用作 EGL 表面，使得 OpenGL ES 能够与 Android 的 SurfaceTexture 直接交互。
-% 应用场景：用于实现视频和动画的优化渲染。
-% 4. EGL_ANDROID_native_fence_sync
-% 功能：支持在图形操作中使用本地栅栏同步机制，以提高 GPU 的并行处理能力。
-% 应用场景：在需要同步多个 GPU 操作时提高性能。
-% 5. EGL_KHR_create_context
-% 功能：允许创建带有特定属性的上下文，增强了对不同版本的 OpenGL ES 的支持。
-% 应用场景：为应用程序提供灵活性，以选择合适的 OpenGL ES 版本和功能。
-% 6. EGL_EXT_image_gl_colorspace
-% 功能：支持不同颜色空间的图像处理，以增强图形的表现力。
-% 应用场景：在色彩管理和图像处理应用中使用。
-% 7. EGL_KHR_swap_buffers_with_damage
-% 功能：允许仅交换需要更新的缓冲区部分，提高交换的效率。
-% 应用场景：在需要减少屏幕刷新时提高性能，特别是动态内容的应用。
-% 8. EGL_KHR_partial_update
-% 功能：支持部分更新 EGL 表面，允许只刷新屏幕的一部分。
-% 应用场景：在需要频繁更新部分图像的应用中提高效率
 
 
 
-% 安卓的gralloc负责管理图形内存的分配和共享，主要组件包括Allocator，Mapper以及BufferQueue。
-% 在API29之后可使用cros grralloc与EGL结合，为gbm(General Buffer Manger)添加支持前渲染的能力。
 
-% 安卓内核编译
-%   gsgpu内核驱动编译
-% mesa驱动层api兼容方案
-% minigbm gsgpu后端接口实现
-% 移植兼容方案
-%   mesa伪编译代码实现
-  %gsgpu内核驱动层多版本兼容方案
-
-% \section{内核态驱动支持}
-% gsgpu驱动 ttm,gem,vram
