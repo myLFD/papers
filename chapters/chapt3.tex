@@ -62,47 +62,50 @@ gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/
 \end{table}
 
 \subsubsection{gralloc模块需求分析}
-1.核心功能
+1）核心功能
 
-    ​GPU硬件兼容性​
-        支持AMD Radeon、GSGPU等LoongArch下GPU驱动。
-        适配DRM/KMS接口，正确处理IOCTL命令。
+    ​GPU硬件兼容性​：支持GSGPU等LoongArch下GPU驱动。适配DRM/KMS接口，正确处理IOCTL命令。
 
-    ​缓冲区分配与管理​
-        支持常见像素格式及修饰符。
-        实现显存（VRAM）与系统内存（SYSTEM RAM）的自动选择策略，优先使用显存提升性能。
+    ​缓冲区分配与管理​：支持常见像素格式及修饰符。实现显存（VRAM）与系统内存（SYSTEM RAM）的自动选择策略，优先使用显存提升性能。
 
-    ​跨API共享​
-        通过DMA-BUF机制导出缓冲区句柄，支持OpenGL/Vulkan/Mesa间的零拷贝数据传输。
-        提供gbm\_bo\_import/gbm\_bo\_map接口，兼容EGL/GLES纹理绑定流程。
+    ​跨API共享​：通过DMA机制导出缓冲区句柄，支持跨进程间的零拷贝数据传输。提供缓冲区对象的导入/映射接口，兼容EGL/GLES纹理绑定流程。
 
-2.性能优化
+2）性能优化
 
-    ​内存复用​​
-        设计缓冲区缓存池，减少频繁分配/释放带来的内存碎片及性能开销。
-        支持按分辨率/格式的LRU淘汰策略。
+    ​内存复用​​：设计缓冲区缓存池，减少频繁分配/释放带来的内存碎片及性能开销。
 
-    ​异步操作支持​
-        提供异步缓冲区映射接口，避免阻塞渲染线程。
+    ​异步操作支持​：提供异步缓冲区映射接口，避免阻塞渲染线程。
 
-3.非功能需求
-    % 性能指标
+3）非功能需求
         
-    % ​缓冲区分配延迟：单次gbm_bo_create调用耗时 ≤ 1ms（4K分辨率下）。
-    % ​DMA-BUF导出吞吐量：支持 ≥ 60fps的1080p缓冲区导出速率。
+    兼容性:兼容Android 12，支持Kernel 5.10及DRM/KMS子系统。
         
-    兼容性
+    安全性:​确保不同进程的缓冲区访问权限隔离以实现内存隔离，所有gbm\_bo对象需通过引用计数自动释放以抗内存泄漏
         
-      兼容Android 12，支持Kernel 5.10及DRM/KMS子系统。
-        
-    安全性
-        
-      ​内存隔离：确保不同进程的缓冲区访问权限隔离。
-      ​抗内存泄漏：所有gbm\_bo对象需通过引用计数自动释放。
-        
-    可维护性
-      分离硬件后端与通用逻辑，便于新增GPU支持。
-      集成Android Logcat，提供关键操作的调试日志。
+    可维护性：分离硬件后端与通用逻辑，便于新增GPU支持，集成Android Logcat，提供关键操作的调试日志。
+
+\subsubsection{硬件混合渲染模块需求分析}
+
+1）核心功能
+
+DRM/KMS 硬件抽象​:支持通过 libdrm 接口与内核 DRM 子系统交互。实现 DRM Plane 分配策略，动态分配 Overlay 和 Primary Plane。
+
+​图层混合与合成​:支持硬件混合与回退到 GPU 合成。支持图层缩放、旋转、Alpha 混合、色彩空间转换。
+
+​缓冲区管理​:通过 Gralloc 分配管理缓冲区。实现显存带宽优化。
+
+2） 兼容性需求
+
+​硬件兼容性​:适配主流 DRM 驱动,支持龙芯LG系列GPU的显存管理。
+
+​安卓版本兼容性​:兼容 Android 10+的HIDL接口。
+
+3）非功能需求
+
+稳定性与安全性:支持 DRM Master 丢失后重新初始化显示管道以实现异常恢复
+
+可维护性：​分离 DRM 设备抽象层
+
 
 \subsection{兼容性需求}
 由于安卓是一个开源项目，因此任何硬件制造商都可以制造搭载安卓操作系统的设备，但兼容安卓的前提是可以正常运行安卓的执行环境和应用。
@@ -151,8 +154,8 @@ gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/
 
 因此，首先需要解决的是在LoongArch架构下，Android系统中显存和系统内存分配映射的问题。AndroidX86\cite{AndroidX86}
 很大程度上解决这个问题，该项目使用Mesa作为OpenGL ES实现，基于DRM和GEM实现了gralloc模块，成功的在x86架构下运行SurfaceFlinger并实现硬件加速\cite{XTYY201710015}。
-基于这个思路，我们也可以使用Mesa作为OpenGL ES实现以及mesa提供的GBM（General Buffer Manager）来管理缓冲区，为此需要LoongArch架构的DRM框架和用户态libdrm的支持。
-其中DRM框架需要基于安卓通用内核5.10实现。
+基于这个思路，我们也可以使用Mesa作为OpenGL ES实现以及mesa提供的GBM（General Buffer Manager）来管理缓冲区，
+为此需要LoongArch架构的DRM框架和用户态libdrm的支持。其中DRM框架需要基于安卓通用内核5.10实现。
 % \subsubsection{安卓硬件驱动接口需求}
 % 2.更多特性支持
 % \subsection{非功能性需求} 
@@ -212,7 +215,7 @@ OpenGL ES的实现是由用户态驱动mesa提供，而mesa实现的OpenGL ES接
 % 在eglInitialize时通过eglApi的接口调用mesa中的eglInitialize函数dri2\_initialize，从而实现mesa驱动的加载和初始化。
 
 \section{GPU驱动内核模块的实现}
-现代操作系统对硬件资源的管理存在两种典型的设计模式：
+现代操作系统对硬件资源的管理存在两种典型的设计模式\cite{马超2016Linux}：
 1.直接访问模式​（如 MS-DOS）：允许用户程序绕过内核直接操作硬件设备，通过物理地址空间或专用 I/O 端口实现低级控制
 2.抽象隔离模式​（如 Linux）：内核通过硬件抽象层（HAL）屏蔽物理设备细节，所有硬件操作必须通过标准化的系统调用（如 open(), ioctl()）发起，内核负责资源调度和安全审查。
 驱动程序就是操作系统内核和硬件沟通的桥梁，准确来说就是内核的一部分。
@@ -545,55 +548,16 @@ drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为�
 \end{minipage}
 
 
-\section{GPU用户态驱动实现}
+% \section{GPU用户态驱动实现}
 
-龙芯现有的驱动实现基于mesa的gallium架构。
-gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
-state tracker是状态跟踪器，负责将将高级图形API的调用转换为Gallium内部的具体的管道操作。
-而驱动层是直接与GPU硬件交互的部分，负责硬件指令生成，就是将Gallium的中间命令转换为GPU特定的指令集；着色器编译，将NIR中间表示编译为GPU原生代码，并进行优化；
-资源管理，分配显存、管理纹理和缓冲区对象；命令提交，构建命令缓冲区，并通过winsys提交到硬件队列等。这是硬件特性的最直接体现，它和state tracker组成了
-gallium架构下实现OpenGL ES功能的核心组件。
-而winsys层主要包括显存管理、命令提交与同步、显示输出管理和操作系统平台适配上。因此本课题主要实现在于winsys层模块的部分重构，而OpenGL ES实现复用
-驱动层的实现即可。
-
-\subsection{构建安卓OpenGL ES支持}
-
-已知复用mesa的driver层实现，因此本节仅描述如何构建安卓OpenGL ES支持，并简述目标动态安装库。
-mesa使用的版本为18.3.6,而由于现有的安卓版本为12.0.0,安卓API版本为31对应的mesa版本为20.3.4,因此需要对现有的mesa的dri接口进行升级。并且由于安卓新的
-编译方式Soong的加入，mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用伪编译的方式。为考虑后续版本的兼容性，因此在现有的mesa18.3.6上采用伪编译的方法，
-使用mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。此后，mesa库将被编译为libgallium\_dri.so以及libglapi.so。其中libgallium\_dri.so
-用于支持DRI使得应用程序可以直接与GPU进行通信，绕过X服务器从而实现更高效的渲染；同时实现多个图形API，包括OpenGL,利用Gallium3D的架构来支持gsgpu的后端。而libglapi.so
-则负责管理OpenGL API调用的分发，将调用路由到适当的实现，通常是后端的图形驱动程序并且处理OpenGL上下文的创建、管理和切换，确保正确的状态和资源在不同的渲染上下文中得到维护。
-由此背景，可以分析得到以下数个方面。
-
-由于mesa是一个开源的OpengGL实现，提供了多种GPU硬件的驱动支持，因此代码提交量极大。而mesa原生编译框架使用的是ninja,而Android中使用的是Makefile,直接编译生成目标动态库文件，
-与原生ninja并无关系，因此需要使用伪编译框架去生成动态库文件，即用cross-compile配置mesa交叉编译脚本aosp-cross,再使用原生ninja编译规则生成目标安装目录install，
-将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯mesa版本提供支持。
-
-mesa编译框架如图\ref{fig:mesa编译框架},AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的mesa交叉编译规则，
-按照mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{mesa编译框架.jpg}
-  \caption{mesa编译框架}
-  \label{fig:mesa编译框架}
-\end{figure}
-
-目标安装动态库说明：
-
-libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
-
-libGLESv1\_CM.so.1.1.0，是一个用于实现 OpenGL ES 1.x（特别是 OpenGL ES 1.1 和 OpenGL ES 1.0）功能的共享库），负责将 OpenGL ES 1.x 请求转换为 GPU 可执行的指令；
-
-libGLESv2.so.2.0.0，是一个提供 OpenGL ES 2.x 功能的共享库，用于支持 OpenGL ES 2.x（及以上版本）的图形渲染，提供了着色器的支持等；
-
-libglapi.so.0.0.0，提供 OpenGL API 调用 的代理功能，使得 OpenGL 函数调用可以通过动态链接的方式，调用不同的 OpenGL 实现库；
-
-以及为了支持gralloc的功能需要安装的libgbm\_mesa.so.1.0.0，提供GBM（Generic Buffer Management）接口的实现，主要用于管理图形缓冲区；
-
-libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastructure (DRI) 驱动程序实现。
-
-上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务调用。
+% 龙芯现有的驱动实现基于mesa的gallium架构。
+% gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
+% state tracker是状态跟踪器，负责将将高级图形API的调用转换为Gallium内部的具体的管道操作。
+% 而驱动层是直接与GPU硬件交互的部分，负责硬件指令生成，就是将Gallium的中间命令转换为GPU特定的指令集；着色器编译，将NIR中间表示编译为GPU原生代码，并进行优化；
+% 资源管理，分配显存、管理纹理和缓冲区对象；命令提交，构建命令缓冲区，并通过winsys提交到硬件队列等。这是硬件特性的最直接体现，它和state tracker组成了
+% gallium架构下实现OpenGL ES功能的核心组件。
+% 而winsys层主要包括显存管理、命令提交与同步、显示输出管理和操作系统平台适配上。因此本课题主要实现在于winsys层模块的部分重构，而OpenGL ES实现复用
+% 驱动层的实现即可。
 
 \section{硬件混合渲染模块}
 %每个厂商hwc实现可能不同如nxp，rockchip，drm-hwc，ranchu，也有很多厂商实现是闭源的如nxp，而谷歌的drm-hwc，ranchu是开源的
@@ -749,7 +713,7 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
   \note{}
 \end{table}
 
-\subsection{龙芯后端支持}
+\subsection{硬件支持模块}
 
 为了实现高效调度，龙芯后端实现部分基于libdrm模块drmCommandWrite等直接与DRM内核进行通信，其具体原理已在\ref{sec:IOCTL命令码设计}中所述。
 
@@ -881,7 +845,7 @@ createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性
 \subsubsection{内存映射与同步模块}
 
 \textbf{缓冲区映射/解除映射}
-
+%写合并优化
 缓冲区映射就是将一个缓冲区从显卡的地址空间映射到系统空间。首先需要通过DRM\_GSGPU\_GEM\_OP命令的GET\_GEM\_CREATE\_INFO向内核查询缓冲区对象的类型，
 可能是VRAM或者GTT内存。如果缓冲区对象是VRAM内存，则需要通过XDMA引擎完成从VRAM内存向系统内存的搬运。即先调用GSGPU\_GEM\_CREATE创建一个GTT内存的缓冲区对象,
 然后使用前一小节实现的内存传输加速模块功能，实现从源VRAM缓冲区向目标GTT缓冲区的复制。如果缓冲区类型为GTT内存，则不需要进行缓冲区搬运因为此时缓冲区已在系统内存。
@@ -912,8 +876,8 @@ createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性
 缓冲区同步用于确保 GPU对指定BO的操作已完成，以便CPU安全访问或修改BO数据。其核心是通过​等待BO空闲​实现CPU与GPU间的同步，避免数据竞争。
 给超时时间设置TIMEOUT\_INFINITE表示一直阻塞到BO空闲或者出错。调用DRM内核的等待指令通知内核等待 BO 空闲，并及时处理一些异常。
 
-\subsection{缓存分配与复用}
-%缓冲区同步
+\subsection{功能实现模块}
+%缓冲区同步，缓冲区复用
 
 本地存储缓冲区和句柄的结构是两个哈希表，一个用于对gralloc\_handle\_t和gralloc\_imported\_handle\_info进行哈希映射，
 info包含缓冲区和该句柄引用该缓冲区的数量，用于支持对已注册缓冲区句柄的多次访问支持。另一个对句柄id和缓冲区进行哈希映射以实现快速访问。
@@ -1081,6 +1045,52 @@ VINTF 文件中的信息会与设备上已安装的 HAL 实现进行对比以验
 是与内存分配器相关的接口，instance元素表示接口的实例名称是 default，通常 HAL 可以有多个实例，但这里指定的是默认实例。而Mapper仅在<transport>子项有所区别，由于Mapper实现的是
 直通式，所以是passthrough，且包含arch元素为32+64,表示该接口支持 32 位和 64 位架构。
 
+\section{构建OpenGL ES支持}
+
+龙芯现有的驱动实现基于mesa的gallium架构。
+gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
+state tracker是状态跟踪器，负责将将高级图形API的调用转换为Gallium内部的具体的管道操作。
+而驱动层是直接与GPU硬件交互的部分，负责硬件指令生成，就是将Gallium的中间命令转换为GPU特定的指令集；着色器编译，将NIR中间表示编译为GPU原生代码，并进行优化；
+资源管理，分配显存、管理纹理和缓冲区对象；命令提交，构建命令缓冲区，并通过winsys提交到硬件队列等。这是硬件特性的最直接体现，它和state tracker组成了
+gallium架构下实现OpenGL ES功能的核心组件。而winsys层主要包括显存管理、命令提交与同步、显示输出管理和操作系统平台适配上。
+因此在安卓上OpenGL ES实现复用驱动层的实现即可。因此本节仅描述如何构建OpenGL ES支持，并简述目标动态安装库。
+
+龙芯mesa的版本为18.3.6,而由于现有的安卓版本为12.0.0,安卓API版本为31对应的mesa版本为20.3.4,因此需要对现有的mesa的dri接口进行升级。并且由于安卓新的
+编译方式Soong的加入，mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用伪编译的方式。为考虑后续版本的兼容性，因此在现有的mesa18.3.6上采用伪编译的方法，
+使用mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。此后，mesa库将被编译为libgallium\_dri.so以及libglapi.so。其中libgallium\_dri.so
+用于支持DRI使得应用程序可以直接与GPU进行通信，绕过X服务器从而实现更高效的渲染；同时实现多个图形API，包括OpenGL,利用Gallium3D的架构来支持gsgpu的后端。而libglapi.so
+则负责管理OpenGL API调用的分发，将调用路由到适当的实现，通常是后端的图形驱动程序并且处理OpenGL上下文的创建、管理和切换，确保正确的状态和资源在不同的渲染上下文中得到维护。
+由此背景，可以分析得到以下数个方面。
+
+由于mesa是一个开源的OpengGL实现，提供了多种GPU硬件的驱动支持，因此代码提交量极大。而mesa原生编译框架使用的是ninja,而Android中使用的是Makefile,直接编译生成目标动态库文件，
+与原生ninja并无关系，因此需要使用伪编译框架去生成动态库文件，即用cross-compile配置mesa交叉编译脚本aosp-cross,再使用原生ninja编译规则生成目标安装目录install，
+将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯mesa版本提供支持。
+
+mesa编译框架如图\ref{fig:mesa编译框架},AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的mesa交叉编译规则，
+按照mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{mesa编译框架.jpg}
+  \caption{mesa编译框架}
+  \label{fig:mesa编译框架}
+\end{figure}
+
+目标安装动态库说明：
+
+libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
+
+libGLESv1\_CM.so.1.1.0，是一个用于实现 OpenGL ES 1.x（特别是 OpenGL ES 1.1 和 OpenGL ES 1.0）功能的共享库），负责将 OpenGL ES 1.x 请求转换为 GPU 可执行的指令；
+
+libGLESv2.so.2.0.0，是一个提供 OpenGL ES 2.x 功能的共享库，用于支持 OpenGL ES 2.x（及以上版本）的图形渲染，提供了着色器的支持等；
+
+libglapi.so.0.0.0，提供 OpenGL API 调用 的代理功能，使得 OpenGL 函数调用可以通过动态链接的方式，调用不同的 OpenGL 实现库；
+
+以及为了支持gralloc的功能需要安装的libgbm\_mesa.so.1.0.0，提供GBM（Generic Buffer Management）接口的实现，主要用于管理图形缓冲区；
+
+libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastructure (DRI) 驱动程序实现。
+
+上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务调用。
+
 \section{安卓系统镜像定制}
 由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit, MMU）采用页式管理来处理 GPU 所使用的内存，
 所有内部功能模块均使用虚拟地址。在连接到内部网络之前，这些地址需要经过转换。当前，MMU 设计了三级页表结构，且页大小（page size）为 16KB。
@@ -1152,9 +1162,9 @@ VINTF 文件中的信息会与设备上已安装的 HAL 实现进行对比以验
 
 \section{本章小结}
 本章介绍基于龙芯显卡的安卓图形栈的整体设计和具体实现。首先对Android 12的兼容性需求以及HAL接口需求做了分析，然后对图形栈整体的方案做了描述，明确图形栈各组件的实现方案；
-接着说明核模DRM和libdrm的ioctl设计接口，以及为了适应内核的多版本需求所实现的一套内核驱动模块多版本适配方案。然后是说明GPU用户态缓冲区管理的实现，并从gallium实现接口和
-缓冲区对象管理两个方面说明LG110用户态缓冲区管理是如何实现的。随后从硬件混合渲染模块、图形缓存分配模块以及HIDL接口设计与实现说明基于LG110的安卓图形HAL层是如何实现的。
-最后简单说明安卓系统镜像构建方面的需求，包括龙芯OpengGL ES实现的库mesa是如何实现框架外编译，以及因为硬件设计上的缺陷如何对安卓系统镜像进行定制。
+接着说明DRM模块和libdrm的ioctl设计接口，以及为了适应内核的多版本需求所实现的一套内核驱动模块多版本适配方案。然后是说明在安卓上是构建OpenGL ES接口支持的方案。
+随后硬件混合渲染模块简要介绍主要模块功能和具体实现。图形缓存分配模块从龙芯后端支持、前端服务实现以及HIDL接口设计与实现这三个部分说明基于LG110的安卓图形缓冲管理HAL层是如何实现的。
+最后简单说明安卓系统镜像定制的方案，因为硬件设计上的缺陷如何对安卓系统镜像进行定制。
 
 % 字段名	对应的函数	功能描述
 % name	"gsgpu_common"	模块的名称，通常用于标识该模块或打印调试信息。

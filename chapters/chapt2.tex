@@ -133,6 +133,7 @@ Android 的图形系统是为移动设备特别设计的，结构如图\ref{fig:
   \centering
   \includegraphics[width=0.8\textwidth]{安卓图形子系统架构图.jpg}
   \caption{安卓图形子系统架构图}
+  \label{fig:安卓图形子系统架构图}
 \end{figure}
 
 以下将从低级别组件和高级别组件分别介绍Android系统级图形架构的基本元素。
@@ -166,13 +167,13 @@ SurfaceHolder 通过回调接口实现 Surface 参数动态配置，其关键控
 
 
 \subsubsection{跨平台图形接口标准}
-EGL（Embedded-System Graphics Library）作为 GLES 的窗口系统绑定层，实现了平台无关的渲染上下文管理、多重缓冲交换（Double/Triple Buffering）以及图形资源生命周期同步等多种特性，
-确保了渲染的高效性与流畅性。
+EGL（Embedded-System Graphics Library）作为 GLES 的窗口系统绑定层，实现了平台无关的渲染上下文管理、
+多重缓冲交换（Double/Triple Buffering）以及图形资源生命周期同步等多种特性，确保了渲染的高效性与流畅性。
 OpenGL ES (GLES) 定义了一套图形渲染 API，旨在与 EGL 结合使用。开发者可以使用 GLES 来绘制纹理多边形，
 而通过 EGL 调用将渲染结果应用到屏幕上。
 
 \subsubsection{新一代图形 API}
-Vulkan 是一种新一代的高性能3D图形API，具有低开销和跨平台特性。与 OpenGL ES 相似，Vulkan 也提供创建高质量实时图形的工具，
+Vulkan\cite{2017Vulkan,2017Getting}是一种新一代的高性能3D图形API，具有低开销和跨平台特性。与 OpenGL ES 相似，Vulkan 也提供创建高质量实时图形的工具，
 但它在性能和灵活性上具备更大的优势。Vulkan 减少了 CPU 开销，使得开发者能够更直接地控制图形硬件。
 此外，Vulkan 支持 SPIR-V 二进制中间语言，允许更加高效的着色器编译和执行，从而提升渲染性能和效率。
 
@@ -258,7 +259,8 @@ Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Galliu
 
 \subsubsection{OpenGL ES}
 OpenGL ES（Open Graphics Library for Embedded Systems）是一个为嵌入式系统设计的图形渲染接口，它为嵌入式设备提供了一个高效的图形渲染平台，
-使其能够以较低的功耗和硬件资源要求进行复杂的图形处理。OpenGL ES 是 OpenGL（一个用于桌面图形渲染的开源标准）的子集，专为移动设备、嵌入式设备、游戏主机、电视和汽车等环境优化。
+使其能够以较低的功耗和硬件资源要求进行复杂的图形处理。OpenGL ES 是 OpenGL\cite{2005Interpretive}一个用于桌面图形渲染的开源标准）的子集，
+专为移动设备、嵌入式设备、游戏主机、电视和汽车等环境优化。
 OpenGL ES 的目标是为设备提供一种跨平台的解决方案，允许开发者利用硬件加速的图形渲染，同时又不需要复杂的硬件支持。
 OpengGL ES版本从1.0到3.x处于不断发展过程中，其与OpengGL的发展不完全相同，但是作为OpenGL规范的子集，两者之间版本有着大致的对应关系。
 
