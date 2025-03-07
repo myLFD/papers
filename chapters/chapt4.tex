@@ -1,7 +1,7 @@
 % !TeX root = ../main.tex
 
 % \chapter{性能分析与优化（安全性与稳定性分析）}
-\chapter{系统测试与优化}
+\chapter{系统测试}
 
 \section{测试平台}
 由于AOSP仅源码就有130G之多，在完成编译之后达到212G，因此构建Android镜像需要一台性能充足构建机以及用于烧录运行镜像的测试机。
@@ -359,9 +359,10 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 % \end{figure}
 
 
-% \section{系统优化}
-% 在上述方案实现中，Android gralloc实际上使用的是mesa提供的图形缓冲区管理接口。在3A5000上运行原生的Native程序，如bootanim，
-% 经测试，在一整个绘制的循环中，glswap所占用的时间超过70\%，而glswap的瓶颈在于访存。因此需要访存优化。
+\section{系统优化}
+lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
+影响图形运行效率的瓶颈是访存，因此使用缓存复用
+
 
 % \subsection{访存优化}
 % LG110支持4✖4 Tile格式的访存优化，如表\ref{tab:颜色缓冲区流水线配置}。为gralloc后端添加bo_create_with_modifiers实现接口，
@@ -383,7 +384,8 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 % \end{table}
 
 
-\section{性能分析}
+% \section{性能分析}
+
 % bocreate 缓冲重用
 % pb_cache_bucket = gsgpu_get_heap_index(domain, flags);
 
@@ -403,3 +405,6 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 
 % \section{？？？}
 
+\section{本章小结}
+本章对本文所研究和构建的系统进行了从内核到整体的测试。首先在服务器上使用AOSP构建了完整的安卓内核、显卡核模块以及安卓系统镜像，在目标龙芯平台上
+安装了安卓系统，并进行了多项功能测试，并使用了龙芯以及谷歌官方提供的测试套件，从内核到系统服务等多个层面验证了系统的正确性。
