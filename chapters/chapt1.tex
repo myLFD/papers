@@ -27,7 +27,7 @@ Android 的图形系统作为Android系统最基础最重要的模块之一，�
 这种多层结构使得开发者能够灵活地利用不同的图形 API，在设计上具有高度的灵活性和可扩展性，但却极大的增加了安卓框架本身的复杂性，使得在实际应用中仍面临诸多挑战。
 例如，不同设备的硬件差异使得图形性能的优化变得复杂。这使得开发者需要针对不同设备进行优化，以确保应用在各种硬件上的流畅运行。
 此外，Android 的多任务处理机制可能导致图形渲染时的资源竞争，进而影响应用的响应速度和帧率。这一问题在资源密集型应用中尤为明显，如大型游戏或复杂的图形应用。
-研究表明，游戏应用中的帧率波动会直接影响用户的留存率，帧率是影响用户满意度的关键因素\cite{2006The}。
+研究表明，游戏应用中的帧率波动会直接影响用户的留存率，帧率是影响用户满意度的关键因素\cite{claypool2006effects}。
 
 通过对图形系统的研究和优化，可以提高应用程序的图形渲染效率，加快界面的响应速度，降低卡顿现象的发生频率。此外
 一个稳定的图形栈可以减少应用程序崩溃和系统崩溃的可能性，提高系统的稳定性和可靠性，保障
@@ -38,91 +38,85 @@ Android 的图形系统作为Android系统最基础最重要的模块之一，�
 为后续的一系列基于安卓系统的开发打下基础，推动安卓项目的顺利进行。
 
 \section{国内外研究现状}
-\subsection{移动端显卡驱动现状}
-移动设备显卡驱动用于处理智能手机、平板电脑和其他移动设备的图形渲染任务。与桌面显卡驱动相比，它们在功耗和散热方面的优化尤为重要，
-以确保设备的电池寿命和用户体验。移动显卡驱动的主要功能有实现低功耗优化，动态调整 GPU 的频率和电压，以节约电池电量；
-图形加速，支持高效的 2D/3D 渲染，以提高用户界面和应用程序的图形性能；视频解码和编码，为高清视频和流媒体播放提供硬件加速支持；
-以及高效的图形API支持，移动驱动通常支持 OpenGL ES 和 Vulkan，以实现高效的图形渲染。常见的移动设备的显卡驱动有ARM Mali驱动，
-Qualcomm Adreno 驱动，Imagination PowerVR 驱动，苹果 A 系列和 M 系列芯片。
 
-1.ARM Mali驱动\cite{ARM}：ARM Mali驱动是为ARM Mali GPU设计的一套图形处理单元驱动程序，它支持OpenGL ES、Vulkan、OpenCL等图形和计算接口，
-用于嵌入式设备和移动设备的图形处理。Mali GPU广泛应用于智能手机、平板电脑、智能电视和其他嵌入式系统。已有多个GPU系列产品的配套驱动，如
-Utgard、Midgard、Bifrost、Valhall等，同时有开源和闭源的驱动实现，开源实现由Panfrost、Lima等社区开发，
-而闭源实现则是由ARM 官方提供的 Mali GPU 驱动。
+\subsection{安卓生态显卡驱动发展路径}
+安卓系统上的显卡驱动技术发展可归纳为四大核心阶段，其演进主线从基础图形支持到性能与生态优化，最终向智能化和跨平台协同迈进：
 
-2.Qualcomm Adreno\cite{qualcomm} 驱动：Qualcomm Adreno 是高通公司为其 Snapdragon 系列芯片设计的 GPU（图形处理单元），
-广泛应用于智能手机、平板电脑和其他嵌入式设备。Adreno 驱动程序为这些设备提供图形渲染和计算能力，
-支持现代图形 API（如 OpenGL ES、Vulkan 和 OpenCL），用于运行复杂的图形和计算任务。
-如同Mali驱动一样，Adreno也有开源和闭源的实现。freedreno 是 Linux 社区开发的开源 Adreno 驱动，支持 OpenGL ES 和 Vulkan。
-闭源实现是由Qualcomm 提供，通常嵌入到 Android 中，提供完整的 GPU 功能支持和性能优化。
+\subsubsection{基础图形框架搭建（Android 2.x-4.x时代）}
 
-3.Imagination PowerVR \cite{imaginationtech}驱动：应用于Imagination Technologies 的 PowerVR 系列 GPU，用以支持高效图形和计算解决方案以及
-延迟渲染架构（Deferred Rendering Architecture），并且提供提供高效的渲染性能和低功耗的特性。该驱动被用于许多移动设备，
-如部分 iPhone 和其他手机品牌。通常是闭源的，优化只针对特定硬件。
+此阶段以构建基础图形渲染能力为核心目标，通过OpenGL ES 1.x/2.0接口实现移动端图形管线标准化\cite{opengles}。
+硬件抽象层（HAL）作为GPU与Android显示合成服务（SurfaceFlinger）之间的桥梁，负责将用户态图形API调用转化为底层GPU指令，
+支持2D界面绘制与早期3D游戏渲染。然而，由于GPU厂商（如高通Adreno、Arm Mali\cite{mali}、Imagination PowerVR）硬件架构差异显著，
+驱动实现高度碎片化，导致开发者需针对不同硬件编写优化代码。Google通过兼容性测试套件（CTS）规范驱动接口行为，
+但实际性能优化仍依赖厂商自行实现。此阶段的技术瓶颈集中在显存管理效率不足、多线程渲染支持缺失以及功耗控制机制原始，难以满足复杂应用场景需求。
 
-4.苹果 A 系列和 M 系列芯片\cite{apple}：适用于苹果自研的苹果的 A 系列和 M 系列芯片，A 系列主要用于 iPhone 和 iPad，
-M 系列则主要用于 Mac 和 iPad，二者都基于 ARM 架构设计。该驱动程序针对苹果的硬件进行深度优化，
-以提供高性能、低功耗的图形处理能力。
+\subsubsection{性能优化与标准化（Android 5.x-8.x时代）​}
 
+随着移动设备屏幕分辨率提升与高帧率游戏需求激增，驱动技术转向深度性能优化与生态标准化。
+Google推出Project Butter项目，在驱动层引入垂直同步（VSYNC）与三重缓冲机制，通过动态调整GPU渲染节奏降低画面撕裂与卡顿现象\cite{GoogleIO2012}。
+Android 7.0正式集成Vulkan API，其低开销设计（Explicit API）与多线程命令提交特性显著降低CPU负载，
+驱动需重构指令调度器以支持并行化渲染管线（如Mali Midgard架构驱动实现多核Shader Core负载均衡）\cite{vulkan}。
+同期，GPU Profiling工具链（如Systrace、GPU渲染模式分析器）的完善迫使驱动层暴露硬件性能计数器（如像素填充率、纹理采样周期），
+辅助开发者定位渲染瓶颈。此阶段的技术突破在于通过API与工具链标准化削弱生态碎片化，
+同时借助硬件架构升级（如Adreno 500系列引入统一着色器架构\cite{adreno}）实现能效比跃升。
 
-% 关键技术：Tiling 渲染：移动 GPU 驱动经常使用 tile-based 渲染架构来减少带宽需求和功耗。
-% 异步计算：驱动程序支持异步任务，以提高图形渲染和计算任务的并行处理能力。
-% 热管理：驱动程序会监控设备温度，并动态调整性能以防止过热。
+\subsubsection{异构计算与驱动模块化（Android 9.x-12时代）​}
 
-% 图形模拟器？
-% x11
-% mesa
-% gpu模拟器:gpgpu sim
-% 命令队列 commandqueue
+移动GPU从专用图形处理器向通用计算加速器转型，驱动技术重点扩展至异构计算支持与架构解耦。
+驱动层集成OpenCL与Vulkan Compute后端，使GPU能够加速机器学习推理（如TensorFlow Lite模型部署\cite{tflite_gpu}）、
+物理模拟等非图形任务，高通Adreno 600系列驱动甚至通过AI协处理器（Hexagon DSP）实现异构任务卸载。
+Project Treble项目重构Android底层架构\cite{treble}，通过硬件接口定义语言（HIDL）将GPU驱动封装为独立模块\cite{hidl}，
+支持通过Google Play系统更新独立推送驱动补丁。为适配90Hz/120Hz高刷新率屏幕，驱动引入自适应刷新率（VRR）与异步时间扭曲（ATW）技术，
+优化触控输入到GPU渲染的端到端延迟（降至10ms以内），并采用分块延迟渲染（TBDR）架构降低带宽占用。
+此阶段的技术重心在于打破传统图形边界，构建驱动与AI框架、显示子系统及外设输入的协同生态。
 
-\subsection{图形系统架构优化}
-由于安卓图形栈的性能与用户体验高相关，Google 本身也在对图形栈做一些优化。这一部分的优化主要是由Google公司完成。
-Android 4.1之后，Google 对 Android Display 系统进行了重构，实现了黄油工程（Project Butter）,在系统受到
-VSync pulse 后，马上开始下一帧的渲染，称为 drawing with VSync，让 CPU/GPU 有完整的时间来处
-理数据，减少了卡顿（jank），具体实现上引入了 Choreographer\cite{google2012dev}。在 Android 7.0 版本之后，首次
-引入 Vulkan API，实现了低开销和高性能的特点，并且允许多线程同时提交工作到 GPU。相比较
-OpenGL ES，Vulkan 在性能提升、帧率提升、cpu 使用率等方面均有较大提升。在Android 9.0 版本中，引入了
-minigbm，旨在为 Android 提供更灵活的缓冲区管理，并用一种标准化的方式来管理和分配图形缓冲区，与 
-Direct Rendering Manager（DRM）紧密结合，使得在 Linux 设备上进行图形输出和显示变得更加高效，满足了
-嵌入式设备对性能和资源管理的严格要求。
+\subsubsection{开源生态与前沿技术融合（Android 13+及未来）​​}
+
+当前阶段以开源化、云端协同与实时图形技术突破为标志。Arm主导的Panfrost项目\cite{panfrost}开源Mali GPU驱动代码，推动开源图形栈（Mesa 3D）适配安卓系统\cite{mesa}，
+降低厂商定制成本并提升安全审计透明度\cite{panfrost}。硬件光线追踪单元的引入要求驱动支持Vulkan Ray Tracing扩展\cite{vulkan_raytracing}，
+实现移动端动态全局光照（如UE5 Lumen技术简化版）与软阴影渲染加速。云游戏与元宇宙需求催生虚拟化GPU驱动架构，
+Android Virtualization Framework支持多实例渲染上下文隔离，并通过AV1编解码硬件卸载降低云端流媒体传输延迟\cite{avf}。
+AI技术进一步渗透至驱动层，利用机器学习模型预测着色器编译热点（如Shader Caching AI），动态优化资源分配策略，
+并结合Android动态性能框架（ADPF）实现能效最优调度。未来技术路线将聚焦于纳米级几何渲染（Nanite-like管线优化）、
+实时路径追踪与端边云协同渲染协议（如Google Stadia演进技术），驱动角色从硬件适配层升级为跨域算力调度中枢。
 
 \subsection{与非ARM架构的兼容}
 由于安卓图形系统较为重要，因此有部分开源项目以及学者提供了一些方案，以期同时兼顾兼容性和高效性。以下是一些方案的介绍。
-张超等\cite{张超2012Android}实现了SurfaceFlinger在桌面Linux的X Window环境下运行。其主要方法是通过替换gralloc硬件模块使用Linux上的窗口引擎，
-也就是使用软件渲染的方式将SurfaceFlinger合成的图像写入共享内存,
- 再由一个桌面图形程序输出画面. 该方法的不足是使用软件渲染而没有调用GPU实现硬件加速, 造成占用大量CPU时间, 并且画面输出过程需要不断调用IPC,
- 在处理3D图形时只有个位数的帧数, 性能较为低下。
+张超等实现了SurfaceFlinger在桌面Linux的X Window环境下运行。其主要方法是通过替换gralloc硬件模块使用Linux上的窗口引擎，
+也就是使用软件渲染的方式将SurfaceFlinger合成的图像写入共享内存，
+再由一个桌面图形程序输出画面。该方法的不足是使用软件渲染而没有调用GPU实现硬件加速，造成占用大量CPU时间，并且画面输出过程需要不断调用IPC，
+在处理3D图形时只有个位数的帧数，性能较为低下\cite{张超2012Android}。
 
-\begin{figure}[h]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.8\textwidth]{Android图形系统向桌面Linux的移植.png}
-  \caption{Android图形系统向桌面Linux的移植}\cite{张超2012Android}
+  \includegraphics[width=0.6\textwidth]{Android图形系统向桌面Linux的移植.pdf}
+  \caption{Android图形系统向桌面Linux的移植\cite{张超2012Android}}
 \end{figure}
 
-Android X86\cite{AndroidX86}项目在X86架构的PC上运行Android系统，该项目使用Mesa\cite{mesa3d}的OpenGL ES实现，并基于DRM\cite{DRM}和GEM\cite{GEM}实现了gralloc.drm模块,
-成功运行了可在X86架构下运行硬件加速的SurfaceFLinger。在此基础上，江帆等\cite{XTYY201710015}提出了一种可以在X Window系统下运行Android SurfaceFlinger的方案,
-具体是使用Mesa作为OpenGL ES实现并使Mesa EGL兼容Android的本地窗口，实现了能够GPU硬件加速的图形合成过程，另外使用DRI2拓展避免了图像缓存由独显到系统内存的拷贝过程。
+Android X86项目在X86架构的PC上运行Android系统，该项目使用Mesa\cite{mesa}的OpenGL ES实现，并基于DRM\cite{DRM}和GEM\cite{GEM}实现了gralloc.drm模块，
+成功运行了可在X86架构下运行硬件加速的SurfaceFLinger\cite{AndroidX86}。在此基础上，江帆等提出了一种可以在X Window系统下运行Android SurfaceFlinger的方案，
+具体是使用Mesa作为OpenGL ES实现并使Mesa EGL兼容Android的本地窗口，实现了能够GPU硬件加速的图形合成过程，另外使用DRI2拓展避免了图像缓存由独显到系统内存的拷贝过程\cite{XTYY201710015}。
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.8\textwidth]{SurfaceFlinger移植X环境架构.png}
-  \caption{SurfaceFlinger移植X环境架构}\cite{XTYY201710015}
+  \caption{SurfaceFlinger移植X环境架构\cite{XTYY201710015}}
 \end{figure}
 
-李\cite{1016779798.nh}设计了一种新的图形系统框架，其参考了安卓图形系统的设计思想，采用分层的架构实现，包括系统平台层、系统运 行库层、应用程序框架层和应用程序层，
+李全刚设计了一种新的图形系统框架，其参考了安卓图形系统的设计思想，采用分层的架构实现，包括系统平台层、系统运 行库层、应用程序框架层和应用程序层，
 系统运 行库层采用 Linux 系统提供的底层库以及一些优秀的开源库，包括字体矢量、XML (Extensible Markup Language)文档解析、数据压缩解压缩、二维向量图形处理等；
-应用程序框架层和应用程序层采用与安卓图形系统基本一致的资源解析、界面绘制及图 像显示流程，并且在系统运行库层和应用程序框架层进行了一定的改造优化。
+应用程序框架层和应用程序层采用与安卓图形系统基本一致的资源解析、界面绘制及图 像显示流程，并且在系统运行库层和应用程序框架层进行了一定的改造优化\cite{1016779798.nh}。
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.6\textwidth]{cnd系统架构.png}
-  \caption{cnd系统架构}\cite{1016779798.nh}
+  \includegraphics[width=0.5\textwidth]{cnd系统架构.pdf}
+  \caption{cnd系统架构\cite{1016779798.nh}}
 \end{figure}
 
-高\cite{高胜寒2019基于国产}基于国产图形处理器设计了一套图形硬件抽象层。该方案对下可兼容国产化GPU硬件，对上可兼容图形API，且可支持多个操作系统。
+高胜寒基于国产图形处理器设计了一套图形硬件抽象层\cite{高胜寒2019基于国产}。该方案对下可兼容国产化GPU硬件，对上可兼容图形API，且可支持多个操作系统。
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.6\textwidth]{高胜寒2019基于国产.png}
-  \caption{高:内核层模块示意图}\cite{高胜寒2019基于国产}
+  \includegraphics[width=0.8\textwidth]{内核层模块示意图.pdf}
+  \caption{内核层模块示意图\cite{高胜寒2019基于国产}}
 \end{figure}
 
 \section{本文主要工作}
