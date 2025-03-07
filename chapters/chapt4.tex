@@ -23,10 +23,14 @@
     通过insmod（/rmmod）加载（或删除）该模块。
 
 \section{测试内容}
+本节将从5部分对图形栈方案进行测试，内核驱动测试用于验证安卓内核以及驱动内核模块的正确性。
+图形缓存分配模块测试用于验证该模块的正确性。由于硬件混合渲染模块为SurfaceFlinger的合成器引擎提供服务端功能，因此使用合成引擎测试用例对
+硬件混合渲染模块的正确性进行测试。渲染引擎测试用于对构建的OpenGL ES实现和LG110 DRI驱动进行测试。
+本课题的关键服务进程是SurfaceFlinger，因此在最后一节对SurfaceFlinger进行测试以完成对SurfaceFlinger进行支持这一既定目标。
 
 \subsection{内核驱动正确性测试}
 由于是设备模块驱动的测试，需要通过内核的debugfs辅助测试，mount -t debugfs none debug挂载debug文件系统，对LG110的3个环形缓冲区进行测试，分别是
-ib、gfx、xdma,通过所有测试用例\ref{fig:内核驱动测试结果}
+ib、gfx、xdma，通过所有测试用例\ref{fig:内核驱动测试结果}
 
 \begin{figure}[H]
     \centering
@@ -35,8 +39,8 @@ ib、gfx、xdma,通过所有测试用例\ref{fig:内核驱动测试结果}
     \label{fig:内核驱动测试结果}
 \end{figure}
 
-\subsection{libdrm正确性测试}
-libdrm中有关LG110的测试共有5个测试套件，使用Cunit单元测试框架编写如\ref{tab:libdrm_gsgpu测试集}。其中：
+内核驱动的功能与libdrm密切相关，
+libdrm中有关gsgpu的测试共有5个测试套件，使用Cunit单元测试框架编写如\ref{tab:libdrm_gsgpu测试集}。其中：
 
 basic\_tests是GPU基础功能测试集，包含测试查询GPU信息的功能、用户空间内存访问功能、缓冲区的逐出功能、GPU 命令提交的功能、多栅栏同步功能 、信号量功能共6部分。
 
@@ -69,7 +73,7 @@ vm\_tests是虚拟内存ID测试集，测试了虚拟内存ID（VMID）预留机
     \note{}
 \end{table}
 
-\subsection{gralloc正确性测试}
+\subsection{图形缓存分配模块正确性测试}
 gralloc功能测试采纳了两部分，一是谷歌官方提供的原生测试用例，是AOSP中framework（框架代码）提供的gralloc测试用例GrallocTypes\_test，
 其主要是使用GTest编写。
 GTest\cite{GoogleTest}是由 Google 开发的一款 C++ 测试框架，用于编写单元测试。它广泛应用于软件开发中，帮助开发人员验证代码的正确性，检测潜在的错误和缺陷。
@@ -148,7 +152,7 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
 %     \label{fig:GrallocTypeGtest测试图}
 % \end{figure}
 
-\textbf{gralloc0测试用例}主要测试了内存缓冲区的分配与释放、图形缓冲区锁定与解锁、API版本的兼容性等,测试项、用例描述和结果如表\ref{tab:gralloc0测试集}。
+\textbf{gralloc0测试用例}主要测试了内存缓冲区的分配与释放、图形缓冲区锁定与解锁、API版本的兼容性等，测试项、用例描述和结果如表\ref{tab:gralloc0测试集}。
 
 \begin{table}[H]
     \centering
@@ -173,8 +177,9 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
 
 \subsection{合成引擎正确性测试}
 \label{sec:合成引擎正确性测试}
+
 这里测试集使用的是SurfaceFlinger的CompositionEngine的测试集libcompositionengine\_test，该测试集主要用于测试CompositionEngine功能的正确性。
-由于CompositionEngine是混合渲染器的客户端，所以该测试集实际上也会对换和渲染器的实现进行测试。该测试集共有71个测试套件482个测试用例，现对测试套件的
+由于CompositionEngine是混合渲染器的客户端，所以该测试集实际上也会\textbf{硬件混合渲染器}的实现进行测试。该测试集共有71个测试套件482个测试用例，现对测试套件的
 测试功能做简单归纳\ref{tab:libcompositionengine_test测试集}。可分为6个主要部分，显示设备管理、合成引擎测试、硬件合成器测试、输出层测试、
 渲染表面与空间映射和Planner策略模块测试，目前可以通过全部的测试用例。
 
@@ -206,14 +211,16 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
 
 \subsection{渲染引擎正确性测试}
 \label{sec:渲染引擎正确性测试}
+
 在安卓的图形系统中，渲染引擎实际上是在SurfaceFlinger进程中创建的一个skiaglthreaded模式，这是为了让所有的GL操作都在同一线程上进行，因为
-OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲染引擎初始化时，会通过GLAPI接口调用具体驱动的GL实现。因此对渲染引擎的测试也是对用户态驱动的
-测试。librenderengine\_test也是AOSP中提供的安卓原生GTest测试用例，主要用于验证图形渲染引擎的功能、稳定性，确保渲染操作在各种场景下能够正确执行，
+OpenGL ES的一些实现要求在同一个线程中执行渲染操作。而在渲染引擎初始化时，会通过GLAPI接口调用具体驱动的GL实现。因此对渲染引擎的测试也是对\textbf{用户态驱动}
+以及\textbf{OpenGL ES实现}的测试。
+librenderengine\_test也是AOSP中提供的安卓原生GTest测试用例，主要用于验证图形渲染引擎的功能、稳定性，确保渲染操作在各种场景下能够正确执行，
 以提供高效的图形和界面表现。该测试分为两个主要的测试套件：RenderEngineTest和RenderEngineThreadedTest。
 
 \textbf{RenderEngineTest}是渲染管线测试，用于验证RenderEngine模块在不同场景下的正确性，确保图形层、颜色、阴影以及变换等操作正常工作，
 核心测试主要包括基础功能测试、高级渲染特性测试、缓冲区操作测试、异常与边界测试等，
-具体如表\ref{tab:RenderEngineTest测试分类}所示,276个测试用例全部通过。
+具体如表\ref{tab:RenderEngineTest测试分类}所示，276个测试用例全部通过。
     \begin{table}[H]
         \centering
         \caption{RenderEngineTest测试分类}
@@ -237,7 +244,7 @@ OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲�
     \end{table}
 
 \textbf{RenderEngineThreadedTest}是渲染线程测试，用于验证RenderEngineThreaded在多线程环境下是否正确代理调用、处理异步操作及状态同步。
-测试覆盖如表\ref{tab:RenderEngineThreadedTest测试分类},并可以通过全部的19个测试用例。两个测试套件结果统计如表\ref{tab:librenderengine_test测试结果}
+测试覆盖如表\ref{tab:RenderEngineThreadedTest测试分类}，并可以通过全部的19个测试用例。两个测试套件结果统计如表\ref{tab:librenderengine_test测试结果}
 
 \begin{table}[H]
     \centering
@@ -283,12 +290,13 @@ OpenGL 的一些实现要求在同一个线程中执行渲染操作。而在渲�
 % \end{figure}
 
 \subsection{SurfaceFlinger测试}
-SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成所有显示内容，它的正确运行是本课题图形栈方案正确性验证的关键。
-其中合成器引擎和渲染引擎的测试已分别在\ref{sec:合成引擎正确性测试}和\ref{sec:渲染引擎正确性测试}中说明过。
-由于 SurfaceFlinger 直接影响到 Android 系统中图形界面的渲染效果,因此SurfaceFlinger的测试设计非常全面，共计94个测试套件898个测试用例，确保系统能够顺畅运行。
-在AOSP下，对SurfaceFlinger的测试包含两个部分，一个是SurfaceFlinger的单元测试libsurfaceflinger\_unittest,另一个是SurfaceFlinger\_test。
 
-\textbf{libsurfaceflinger\_unittest}是安卓原生的测试集，58个测试套件共574个测试用例。如表\ref{tab:libsurfaceflinger_unittest测试分类},可将测试用例分为9个主要测试类别。
+SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成所有显示内容，它的正确运行是本课题图形栈方案正确性验证的关键,也是本课题最初预定的目标之一。
+其中合成器引擎和渲染引擎的测试已分别在\ref{sec:合成引擎正确性测试}和\ref{sec:渲染引擎正确性测试}中说明过。
+由于 SurfaceFlinger 直接影响到 Android 系统中图形界面的渲染效果，因此SurfaceFlinger的测试设计非常全面，共计94个测试套件898个测试用例，确保系统能够顺畅运行。
+在AOSP下，对SurfaceFlinger的测试包含两个部分，一个是SurfaceFlinger的单元测试libsurfaceflinger\_unittest，另一个是SurfaceFlinger\_test。
+
+\textbf{libsurfaceflinger\_unittest}是安卓原生的测试集，58个测试套件共574个测试用例。如表\ref{tab:libsurfaceflinger_unittest测试分类}，可将测试用例分为9个主要测试类别。
 
 \begin{table}[H]
     \centering
@@ -320,16 +328,16 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
     \begin{tabular}{lll}
         \toprule
         测试类别 & 代表测试套件	& 描述 \\
-        权限与安全 & CredentialsTest, SetFlagsSecure & 权限控制、安全渲染 \\
-        显示管理 & VirtualDisplayTest, MultiDisplay	& 多显示配置、虚拟显示 \\
-        图层基础操作 & LayerTransactionTest, ChildLayerTest	& 创建/销毁/层级关系 \\
-        图层高级特性 & LayerTypeTransactionTest, EffectLayer & 模糊/圆角/混合效果 \\
-        渲染与合成 & SetFrameRateTest, SetDataspace	& 帧率控制、色彩空间 \\
+        权限与安全 & CredentialsTest， SetFlagsSecure & 权限控制、安全渲染 \\
+        显示管理 & VirtualDisplayTest， MultiDisplay	& 多显示配置、虚拟显示 \\
+        图层基础操作 & LayerTransactionTest， ChildLayerTest	& 创建/销毁/层级关系 \\
+        图层高级特性 & LayerTypeTransactionTest， EffectLayer & 模糊/圆角/混合效果 \\
+        渲染与合成 & SetFrameRateTest， SetDataspace	& 帧率控制、色彩空间 \\
         截图功能 & ScreenCaptureTest & 捕获逻辑、安全限制 \\
-        异常处理 & InvalidHandleTest, SetInvalidColor & 非法输入容错 \\
+        异常处理 & InvalidHandleTest， SetInvalidColor & 非法输入容错 \\
         性能压力 & SurfaceFlingerStress	& 高频操作稳定性 \\
         事务处理 & LayerTransactionTest &   参数化用例 、原子性、合并逻辑 \\
-        特殊场景 & MirrorLayerTest, BoundlessLayerTest & 镜像/无边界层处理 \\        
+        特殊场景 & MirrorLayerTest， BoundlessLayerTest & 镜像/无边界层处理 \\        
         \bottomrule
     \end{tabular}
     \note{}
@@ -359,9 +367,9 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 % \end{figure}
 
 
-\section{系统优化}
-lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
-影响图形运行效率的瓶颈是访存，因此使用缓存复用
+% \section{系统优化}
+% lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
+% 影响图形运行效率的瓶颈是访存，因此使用缓存复用
 
 
 % \subsection{访存优化}
@@ -387,7 +395,7 @@ lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高�
 % \section{性能分析}
 
 % bocreate 缓冲重用
-% pb_cache_bucket = gsgpu_get_heap_index(domain, flags);
+% pb_cache_bucket = gsgpu_get_heap_index(domain， flags);
 
 % \section{启动时间优化}
 

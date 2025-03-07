@@ -2,10 +2,10 @@
 
 \ustcsetup{
   keywords = {
-    图形栈 ,龙芯GPU ,图形驱动 ,Android ,SurfaceFlinger
+    图形栈,龙芯GPU,图形驱动,Android,SurfaceFlinger
   },
   keywords* = {
-    Graphic Stack ,Loongson GPU,GPU Driver,Android ,SurfaceFlinger
+    Graphic Stack,Loongson GPU,GPU Driver,Android,SurfaceFlinger
   },
 }
 \begin{abstract}
@@ -13,30 +13,55 @@
   随着信息技术的快速发展，移动端图形处理需求日益增长，Android 作为全球主流移动操作系统，其图形系统的性能与兼容性直接影响用户体验。
   然而，当前 Android 生态主要围绕 ARM Mali、Qualcomm Adreno 等 GPU 进行优化，对国产 GPU 的支持仍处于初步探索阶段。
   与此同时，LoongArch 作为自主研发的指令集架构，正逐步构建完整的软件生态，但在 Android 平台上的图形系统仍面临适配挑战。
-  针对这一现状，本文开展了对 LoongArch 架构下 GSGPU 显卡的适配研究，填补了该架构在 Android 生态中的技术空白。
+  针对这一现状，本文开展了对 LoongArch 架构下龙芯显卡的适配研究，填补了该架构在 Android 生态中的技术空白。
 
-  本文基于 LoongArch 处理器与 GSGPU 显卡，围绕 Android 图形系统进行了以下工作:
+  本文基于 LoongArch 处理器与龙芯显卡，围绕 Android 图形系统进行了以下工作:
   
-  1.设计并实现了显卡驱动内核模块，定义了 DRM 内核模块与用户态之间的交互命令码，实现了从用户空间提交 GPU 命令到 GPU 处理器的高效传输。
+  1.设计并实现了显卡驱动内核模块，设计了 DRM 内核模块与用户态之间的交互命令码，实现了从用户空间提交 GPU 命令到 GPU 处理器的高效传输。
 
-  2.基于龙芯硬件接口，实现了 Android 关键依赖模块——硬件混合渲染器（HWC）和图形缓存分配器（Gralloc）。其中，图形缓存分配器采用缓冲区复用与零拷贝技术，优化缓冲区分配与映射效率；
+  2.基于龙芯硬件接口，实现了 Android 关键依赖模块——硬件混合渲染器（HWC）和图形缓存分配器（Gralloc）。
+  其中，图形缓存分配器采用缓冲区复用与零拷贝技术，优化缓冲区分配与映射效率；
   硬件混合渲染器则作为合成器，为上层 Android 应用提供帧合成与显示支持。
 
-  3.解决了龙芯平台 Android 系统的软件栈适配问题，增加 OpenGL ES 支持，并针对硬件特性定制了部分 Android 系统镜像，成功打通系统显示通路，构建了完整的支持龙芯 GPU 的 Android 运行环境。
+  3.解决了龙芯平台 Android 系统的软件栈适配问题，增加 OpenGL ES 支持，并针对硬件特性定制了部分 Android 系统镜像，
+  成功打通系统显示通路，构建了完整的支持龙芯 GPU 的 Android 运行环境。
 
   为验证系统的正确性与可用性，本文基于 Android 官方测试集对各模块进行了功能测试。
-  实验结果表明，本文首次在 LoongArch 平台上成功适配 GSGPU 显卡，并构建了完整的 Android 图形系统，确保了国产 GPU 在 Android 生态中的可用性。
+  实验结果表明，本文首次在 LoongArch 平台上成功适配龙芯显卡，并构建了完整的 Android 图形系统，确保了国产 GPU 在 Android 生态中的可用性。
   研究成果实现了国产 GPU 与 Android 框架的高效协同，为后续 LoongArch 平台的国产化替代与生态完善奠定了坚实的技术基础。
   
 \end{abstract}
 
 \begin{abstract*}
-  This is a sample document of USTC thesis \LaTeX{} template for bachelor,
-  master and doctor. The template is created by zepinglee and seisman, which
-  orignate from the template created by ywg. The template meets the
-  equirements of USTC thesis writing standards.
-
-  This document will show the usage of basic commands provided by \LaTeX{} and
-  some features provided by the template. For more information, please refer to
-  the template document ustcthesis.pdf.
+  With the rapid development of information technology, the demand for mobile graphics processing continues to grow. 
+  As a globally dominant mobile operating system, 
+  Android's graphics system performance and compatibility directly impact user experience.
+  However, the current Android ecosystem primarily optimizes for GPUs such as ARM Mali and Qualcomm Adreno, 
+  while support for domestic GPUs is still in its early stages. 
+  Meanwhile, LoongArch, as an independently developed instruction set architecture, 
+  is gradually building a complete software ecosystem. 
+  However, its graphics system on the Android platform still faces adaptation challenges.
+  To address this situation, this paper conducts adaptation research on Loongson GPUs under the LoongArch architecture, 
+  filling the technical gap of this architecture within the Android ecosystem.
+  Based on LoongArch processors and Loongson GPUs, this paper focuses on the Android graphics system and undertakes the following work:
+  
+  1.Designed and implemented a GPU driver kernel module, establishing interaction command codes between the DRM kernel module and user space, 
+  achieving efficient transmission of GPU commands from user space to the GPU processor.
+  
+  2.Implemented key Android dependency modules—Hardware Composer (HWC) and Graphics Allocator (Gralloc)—based on Loongson hardware interfaces. 
+  The graphics allocator adopts buffer reuse and zero-copy technologies to optimize buffer allocation and mapping efficiency. 
+  The hardware composer, acting as a compositor, provides frame composition and display support for upper-layer Android applications.
+  
+  3.Addressed software stack adaptation issues on the Loongson platform’s Android system by adding OpenGL ES 
+  support and customizing certain Android system images according to hardware characteristics. 
+  This successfully established the system display pipeline and built a complete Android runtime environment supporting Loongson GPUs.
+  
+  To verify system correctness and usability, 
+  this paper conducted functionality testing on each module using the official Android test suite. 
+  Experimental results show that this work successfully adapts Loongson GPUs to the LoongArch platform 
+  for the first time and establishes a complete Android graphics system, 
+  ensuring the usability of domestic GPUs within the Android ecosystem. 
+  The research outcomes enable efficient collaboration between domestic GPUs and the Android framework, 
+  laying a solid technical foundation for future localization and ecosystem enhancement of the LoongArch platform.
+  
 \end{abstract*}

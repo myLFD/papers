@@ -9,7 +9,7 @@ AOSP源码树结构。第二部分主要介绍安卓图形系统结构，分别�
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{安卓系统架构图.jpg}
+  \includegraphics[width=0.8\textwidth]{安卓系统架构图.pdf}
   \caption{安卓系统架构图}
   \label{fig:安卓系统架构图}
 \end{figure}
@@ -30,9 +30,8 @@ Android 的内核基于 Linux 操作系统，Linux 内核负责系统资源的�
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{soong结构示意图.jpg}
-  \caption{Soong结构示意图}
-  \label{fig:Soong结构示意图}
+  \includegraphics[width=0.8\textwidth]{soong结构示意图.pdf}
+  \caption{Soong结构示意图}\label{fig:Soong结构示意图}
 \end{figure}
 
 Soong 是 Android 构建系统的一部分，主要用于替代旧的 Makefile 系统。它是一个基于 Kati GNU Make 克隆工具和Ninja构建系统组件的构建工具，旨在简化和加速 Android 的构建过程。
@@ -47,7 +46,7 @@ Soong 是 Android 构建系统的一部分，主要用于替代旧的 Makefile �
 基于 Blueprint 的构建：Soong 使用了一种名为 Blueprint 的配置语言，这种语言是针对 Android 特殊需求而设计的。Blueprint 使得定义模块及其依赖关系变得更加直观和灵活。
 其具有高性能、模块化和可扩展性和集成 Gradle等多种优势。Soong 通过并行化构建过程和智能依赖分析，显著提高了编译速度，使得开发者能更快地迭代。
 同时支持多种模块类型，包括 Java、C/C++ 和资源文件等，适应了 Android 多样化的构建需求。开发者可以通过编写新的 Blueprint 文件来扩展 Soong 的功能。
-Soong 还与 Gradle 集成，为 Android 应用的构建提供了更好的支持，使得 Android 应用开发更加灵活和便捷。结构如图\ref{fig:soong结构示意图}
+Soong 还与 Gradle 集成，为 Android 应用的构建提供了更好的支持，使得 Android 应用开发更加灵活和便捷。结构如图\ref{fig:Soong结构示意图}
 
 \subsubsection{bionic}
 
@@ -93,8 +92,8 @@ AOSP源码树的核心包含以下几个部分：
 
   本文的工作集中在frameworks、device、external这几个目录下，以下几个是关键部分：
 
-  frameworks/native/services/surfaceflinger:Android中SurfaceFlinger服务所在的源码实现，集成了CompositionEngine(合成器的客户端),担任图形栈生产者消费者模型中消费端的角色，
-  用于将上层的多个源数据进行合成并输送到显示器。
+  frameworks/native/services/surfaceflinger:Android中SurfaceFlinger服务所在的源码实现，集成了CompositionEngine(合成器的客户端),
+  担任图形栈生产者消费者模型中消费端的角色，用于将上层的多个源数据进行合成并输送到显示器。
 
   frameworks/native/libs/renderengine:Android中渲染引擎实现，包含skia引擎和gl引擎，负责系统的图形生成，该引擎的在创建时会通过获取EGL句柄、创建绑定上下文等实现对显卡驱动的调用。
 
@@ -112,8 +111,7 @@ AOSP源码树的核心包含以下几个部分：
 
   device/loongson/loongsonboard/subdevs/graphics:龙芯设备图形栈的安装配置文件，对于所需安装的产品包、产品拷贝文件、以及板卡使用的编译宏等进行配置。
 
-\section{Android图形系统结构}
-\label{sec:Android图形系统结构}
+\section{Android图形系统结构}\label{sec:Android图形系统结构}
 Android 的图形系统是为移动设备特别设计的，结构如图\ref{fig:安卓图形子系统架构图},包含了多个组件，如 SurfaceFlinger、Hardware Composer 
 和各种图形库（如 OpenGL ES 和 Vulkan）。其设计理念主要体现在以下几个方面：
 
@@ -131,9 +129,8 @@ Android 的图形系统是为移动设备特别设计的，结构如图\ref{fig:
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{安卓图形子系统架构图.jpg}
-  \caption{安卓图形子系统架构图}
-  \label{fig:安卓图形子系统架构图}
+  \includegraphics[width=0.8\textwidth]{安卓图形子系统架构图.pdf}
+  \caption{安卓图形子系统架构图}\label{fig:安卓图形子系统架构图}
 \end{figure}
 
 以下将从低级别组件和高级别组件分别介绍Android系统级图形架构的基本元素。
@@ -159,10 +156,8 @@ SurfaceHolder 通过回调接口实现 Surface 参数动态配置，其关键控
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{Surface系统.jpg}
-  \caption{Surface系统的任督二脉}    
-  \label{fig:Surface系统的任督二脉}
-  \cite{邓凡平2011深入理解}
+  \includegraphics[width=0.8\textwidth]{Surface系统.pdf}
+  \caption{Surface系统的任督二脉\cite{邓凡平2011深入理解}}\label{fig:Surface系统的任督二脉}
 \end{figure}
 
 
@@ -173,7 +168,7 @@ OpenGL ES (GLES) 定义了一套图形渲染 API，旨在与 EGL 结合使用。
 而通过 EGL 调用将渲染结果应用到屏幕上。
 
 \subsubsection{新一代图形 API}
-Vulkan\cite{2017Vulkan,2017Getting}是一种新一代的高性能3D图形API，具有低开销和跨平台特性。与 OpenGL ES 相似，Vulkan 也提供创建高质量实时图形的工具，
+Vulkan\cite{sellers2016vulkan,kenwright2017getting}是一种新一代的高性能3D图形API，具有低开销和跨平台特性。与 OpenGL ES 相似，Vulkan 也提供创建高质量实时图形的工具，
 但它在性能和灵活性上具备更大的优势。Vulkan 减少了 CPU 开销，使得开发者能够更直接地控制图形硬件。
 此外，Vulkan 支持 SPIR-V 二进制中间语言，允许更加高效的着色器编译和执行，从而提升渲染性能和效率。
 
@@ -237,7 +232,7 @@ TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView �
 而安全和监控模块用于系统安全、身份验证、访问控制和资源监控的功能模块
 
 \subsection{MESA}
-mesa\cite{mesa3d}是由Brian Paul于1993年8月发起的一个开源图形API软件实现，提供了一整套图形库和驱动程序，允许开发者使用标准的图形 API（如OpenGL,OpenGL ES，Vulkan等）
+mesa\cite{mesa}是由Brian Paul于1993年8月发起的一个开源图形API软件实现，提供了一整套图形库和驱动程序，允许开发者使用标准的图形 API（如OpenGL,OpenGL ES，Vulkan等）
 来进行图形渲染，而无需直接依赖硬件制造商的专有驱动程序，现由freedesktop维护并被广泛采用。
 由于其本身的设计初衷就是为了提供硬件无关的图形渲染能力，所以mesa是一个跨平台跨操作系统的图形库，
 可以为多个硬件平台提供支持，包括intel、amd、Nvidia等驱动均在mesa上有相关的开源实现，操作系统上支持Android、Linux、BSD 系统等。
@@ -252,9 +247,8 @@ Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Galliu
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{mesa驱动结构图.jpg}
-  \caption{mesa驱动结构图}
-  \label{fig:mesa驱动结构图}
+  \includegraphics[width=0.8\textwidth]{mesa驱动结构图.pdf}
+  \caption{mesa驱动结构图}\label{fig:mesa驱动结构图}
 \end{figure}
 
 \subsubsection{OpenGL ES}
@@ -277,9 +271,8 @@ OpengGL ES 2.0去除了一些不常用的功能，专注于嵌入式设备的需
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{OpengGL ES版本演进.jpg}
-  \caption{OpengGL ES版本演进}
-  \label{fig:OpengGL ES版本演进}
+  \includegraphics[width=0.8\textwidth]{OpengGL+ES版本演进.pdf}
+  \caption{OpengGL ES版本演进}\label{fig:OpengGL ES版本演进}
 \end{figure}
 
 \subsubsection{GBM（Generic Buffer Manager）}
@@ -298,9 +291,8 @@ DRM框架（Direct Rendering Manager） 是Linux内核中用于管理图形硬�
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.6\textwidth]{DRM整体结构.jpg}
-  \caption{DRM整体结构}
-  \label{fig:DRM整体结构}
+  \includegraphics[width=0.6\textwidth]{DRM整体结构.pdf}
+  \caption{DRM整体结构}\label{fig:DRM整体结构}
 \end{figure}
 
 KMS（Kernel Mode Setting） 内核显示模式设设置，是通过内核来设置和管理显示设备的模式（如分辨率、刷新率、颜色深度等）。
@@ -310,9 +302,8 @@ GEM（Graphics Execution Manager）是图形缓冲区管理模块，为操作系
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.8\textwidth]{DRM显示控制.jpg}
-  \caption{DRM显示控制}
-  \label{fig:DRM显示控制}
+  \includegraphics[width=0.8\textwidth]{DRM显示控制.pdf}
+  \caption{DRM显示控制}\label{fig:DRM显示控制}
 \end{figure}
 
 \section{本章小结}
