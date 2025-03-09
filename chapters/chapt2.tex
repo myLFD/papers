@@ -5,7 +5,7 @@
 AOSP源码树结构。第二部分主要介绍安卓图形系统结构，分别从低级别组件和高级别组件介绍图形系统所涉及的基本元素，分析实现龙芯显卡支持涉及哪些组件。
 最后第三部分说明了现有龙芯GPU软件栈，依次介绍了核模块的功能与类型，MESA提供的数个核心组件，DRM框架和libdrm。
 
-\section{AOSP project}
+\section{AOSP}
 
 \begin{figure}[h]
   \centering
@@ -14,6 +14,7 @@ AOSP源码树结构。第二部分主要介绍安卓图形系统结构，分别�
   \label{fig:安卓系统架构图}
 \end{figure}
 
+AOSP（Android Open Source Project），即安卓开源项目。
 从架构上来看，Android系统的架构自下而上可以分为五个主要层次：内核层、硬件抽象层、系统运行库层（包括安卓运行时库）、应用程序框架层和应用程序层，如图\ref{fig:安卓系统架构图}。
 Android 的内核基于 Linux 操作系统，Linux 内核负责系统资源的管理，如 CPU 调度、内存管理、设备管理、文件系统和网络通信等，并且包含了一些安卓特有的功能。
 硬件抽象层是对底层实现的屏蔽，通过硬件逻辑和硬件接口的分离，实现上层应用对具体硬件无关的调用。
@@ -103,9 +104,9 @@ AOSP源码树的核心包含以下几个部分：
 
   external/loong-gpucomp:集成了龙芯显卡的后端实现LLVM，主要用于在mesa编译时使用。
 
-  external/loonggbm:本课题关于龙芯安卓gralloc图形内存分配器实现，根据framework框架中的gralloc4标准实现。
+  external/lgbm:本课题关于龙芯安卓gralloc图形内存分配器实现，根据framework框架中的gralloc4标准实现。
 
-  external/drm\_hwcomposer:龙芯安卓硬件混合渲染器，主要实现了合成器的后端部分，包括设备注册与初始化以及验证与显示等功能。
+  external/lhwcomposer:龙芯安卓硬件混合渲染器，主要实现了合成器的服务端部分，包括设备注册与初始化以及验证与显示等功能。
 
   device/loongson/loongsonboard/loongson\_3a5000:龙芯3A5000硬件配置目录，包含初始化的服务顺序，部分系统属性的设置等。
 
