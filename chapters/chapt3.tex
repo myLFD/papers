@@ -126,7 +126,8 @@ gralloc模块需要完成内存分配、缓冲区映射、缓冲区管理、性�
 gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/hardware/interfaces/graphics/mapper下，
 其中HAL接口表统计如表\ref{tab:gralloc模块HAL接口}。
 而HWC模块的实现较为复杂，包含服务端和客户端，服务端的实现集中在/hardware/interfaces/graphics/composer下，
-通过调用硬件供应商的具体实现共同组成服务端，客户端是指如SurfaceFlinger中的CompositionEngine通过跨进程调用服务端的实现。
+服务端钟具体EGL的调用是由硬件供应商实现并通过私有调用回安卓合成系统用于最终的缓冲区显示\cite{baiget2019architecture}，
+客户端是指如SurfaceFlinger中的CompositionEngine通过跨进程调用服务端的实现。
 
 \begin{table}[h]
   \centering
