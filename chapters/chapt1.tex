@@ -56,7 +56,7 @@ Android 的图形系统作为Android系统最基础最重要的模块之一，�
 Google推出Project Butter项目，在驱动层引入垂直同步（VSYNC）与三重缓冲机制，通过动态调整GPU渲染节奏降低画面撕裂与卡顿现象\cite{GoogleIO2012}。
 Android 7.0正式集成Vulkan API，其低开销设计（Explicit API）与多线程命令提交特性显著降低CPU负载，
 驱动需重构指令调度器以支持并行化渲染管线（如Mali Midgard架构驱动实现多核Shader Core负载均衡）\cite{vulkan}。
-同期，GPU Profiling工具链（如Systrace、GPU渲染模式分析器）的完善迫使驱动层暴露硬件性能计数器（如像素填充率、纹理采样周期），
+同期，GPU Profiling工具链\cite{AndroidGPUProfiling}（如Systrace、GPU渲染模式分析器）的完善迫使驱动层暴露硬件性能计数器（如像素填充率、纹理采样周期），
 辅助开发者定位渲染瓶颈。此阶段的技术突破在于通过API与工具链标准化削弱生态碎片化，
 同时借助硬件架构升级（如Adreno 500系列引入统一着色器架构\cite{adreno}）实现能效比跃升。
 
@@ -66,8 +66,8 @@ Android 7.0正式集成Vulkan API，其低开销设计（Explicit API）与多�
 驱动层集成OpenCL与Vulkan Compute后端，使GPU能够加速机器学习推理（如TensorFlow Lite模型部署\cite{tflite_gpu}）、
 物理模拟等非图形任务，高通Adreno 600系列驱动甚至通过AI协处理器（Hexagon DSP）实现异构任务卸载。
 Project Treble项目重构Android底层架构\cite{treble}，通过硬件接口定义语言（HIDL）将GPU驱动封装为独立模块\cite{hidl}，
-支持通过Google Play系统更新独立推送驱动补丁。为适配90Hz/120Hz高刷新率屏幕，驱动引入自适应刷新率（VRR）与异步时间扭曲（ATW）技术，
-优化触控输入到GPU渲染的端到端延迟（降至10ms以内），并采用分块延迟渲染（TBDR）架构降低带宽占用。
+支持通过Google Play系统更新独立推送驱动补丁。为适配90Hz/120Hz高刷新率屏幕，驱动引入自适应刷新率（VRR）\cite{AndroidARR}与异步时间扭曲（ATW）技术，
+优化触控输入到GPU渲染的端到端延迟，并采用分块延迟渲染（TBDR）架构降低带宽占用。
 此阶段的技术重心在于打破传统图形边界，构建驱动与AI框架、显示子系统及外设输入的协同生态。
 
 \subsubsection{开源生态与前沿技术融合（Android 13+及未来）​​}
@@ -113,6 +113,7 @@ Android X86项目在X86架构的PC上运行Android系统，该项目使用Mesa\c
 \end{figure}
 
 高胜寒基于国产图形处理器设计了一套图形硬件抽象层\cite{高胜寒2019基于国产}。该方案对下可兼容国产化GPU硬件，对上可兼容图形API，且可支持多个操作系统。
+
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.8\textwidth]{内核层模块示意图.pdf}

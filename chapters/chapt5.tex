@@ -22,6 +22,39 @@
 \textbf{测试机}：运行主机是LoongArch64结构，使用龙芯的3A5000CPU，配备7A2000桥片。桥片上集成了LG110显卡，该显卡所使用的固件需要在Android内核构建时以被编入，而内核驱动在安卓系统进入shell时
     通过insmod（/rmmod）加载（或删除）该模块。
 
+\section{测试过程}
+
+\subsection{测试流程}
+测试流程如图\ref{fig:实机测试流程}。由于目前没有模拟7A2000的模拟器，所以本课题测试及调试均在实机环境下完成。
+首先需要准备好安卓环境下的Native测试程序的可执行文件，这里的来源主要来自于AOSP的原生测试用例。启动测试机以及安卓镜像，进入命令行界面如图\ref{fig:安卓命令行界面},
+在命令行中使用insmod加载内核驱动模块，通过上位机使用adb与运行的安卓系统进行连接，将测试程序推至相应的测试目录下，再运行相应的测试用例。如运行有问题则进行调试。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{真机测试流程.pdf}
+  \caption{实机测试流程}
+  \label{fig:实机测试流程}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{安卓命令行界面.png}
+  \caption{安卓命令行界面}
+  \label{fig:安卓命令行界面}
+\end{figure}
+
+\subsection{程序调试}
+实机调试采用的是GDB工具加日志的方式。由于是实机环境，所以内核部分无法使用GDB，仅依靠日志输出完成调试。而在安卓环境下无法直接使用GDB调试某个程序或进程，所以采用测试机中后端加上位机前端的方式，
+即在安卓镜像中编译可运行的GDB工具后端gdbserver，gdbserver可以直接运行调试某个程序或者直接链接某个以运行的进程并等待GDB前端的连接。上位机通过网络与安卓测试机连接，
+使用GDB工具设置测试机的IP和端口进行连接，并设置根文件目录、动态库搜索目录强制加载当前进程中的动态库文件的符号表，从而实现对某一程序或进程的测试。结构如图\ref{fig:程序调试结构图}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{程序调试结构图.pdf}
+  \caption{程序调试结构图}
+  \label{fig:程序调试结构图}
+\end{figure}
+
 \section{测试内容}
 本节将从5部分对图形栈方案进行测试，内核驱动测试用于验证安卓内核以及驱动内核模块的正确性。
 图形缓存分配模块测试用于验证该模块的正确性。由于硬件混合渲染模块为SurfaceFlinger的合成器引擎提供服务端功能，因此使用合成引擎测试用例对
@@ -305,6 +338,7 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
     \begin{tabular}{lll}
         \toprule
         测试类别 & 代表测试套件	& 描述 \\
+        \midrule
         显示管理 & DisplayIdentificationTest & 验证显示设备的连接、断开、配置和状态管理 \\
         合成与渲染 & CompositionTest & HWC/RE合成路径验证 \\
         VSync与调度测试 & VSyncDispatchTimerQueueTest & 验证垂直同步机制、调度策略及时间预测 \\
@@ -328,6 +362,7 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
     \begin{tabular}{lll}
         \toprule
         测试类别 & 代表测试套件	& 描述 \\
+        \midrule
         权限与安全 & CredentialsTest， SetFlagsSecure & 权限控制、安全渲染 \\
         显示管理 & VirtualDisplayTest， MultiDisplay	& 多显示配置、虚拟显示 \\
         图层基础操作 & LayerTransactionTest， ChildLayerTest	& 创建/销毁/层级关系 \\
@@ -414,5 +449,5 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 % \section{？？？}
 
 \section{本章小结}
-本章对本文所研究和构建的系统进行了从内核到整体的测试。首先在服务器上使用AOSP构建了完整的安卓内核、显卡核模块以及安卓系统镜像，在目标龙芯平台上
+本章对本文所研究和构建的系统进行了从内核到整体的测试。简要介绍了整个测试过程，包括测试流程以及调试方法。在服务器上使用AOSP构建了完整的安卓内核、显卡核模块以及安卓系统镜像，在目标龙芯平台上
 安装了安卓系统，并进行了多项功能测试，并使用了龙芯以及谷歌官方提供的测试套件，从内核到系统服务等多个层面验证了系统的正确性。

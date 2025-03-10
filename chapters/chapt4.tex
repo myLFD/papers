@@ -8,7 +8,7 @@
 \section{GPU驱动内核模块的实现}
 现代操作系统对硬件资源的管理存在两种典型的设计模式\cite{马超2015linux}：
 1.直接访问模式​（如 MS-DOS）：允许用户程序绕过内核直接操作硬件设备，通过物理地址空间或专用 I/O 端口实现低级控制
-2.抽象隔离模式​（如 Linux）：内核通过硬件抽象层（HAL）屏蔽物理设备细节，所有硬件操作必须通过标准化的系统调用（如 open()， ioctl()）发起，内核负责资源调度和安全审查。
+2.抽象隔离模式​（如 Linux）：内核通过硬件抽象层（HAL）屏蔽物理设备细节，所有硬件操作必须通过标准化的系统调用\cite{刘大同2016vxworks}（如 open()， ioctl()）发起，内核负责资源调度和安全审查。
 驱动程序就是操作系统内核和硬件沟通的桥梁，准确来说就是内核的一部分。
 
 \subsection{IOCTL命令码设计}
@@ -33,7 +33,7 @@ args 是以unsigned long类型传递的，是用户空间传递的命令参数�
 
 cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
 
-在linux内核中还定义了几个辅助宏用于生成具体的命令码，如图\ref{fig:IOCTL辅助宏定义}。
+在linux内核中还定义了几个辅助宏用于生成具体的命令码，如图\ref{lst:drm-ioctl}。
 
 \begin{table}[h]
   \centering
@@ -152,7 +152,7 @@ cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
 其中ioctl对应某个命令码，以DRM\_GSGPU\_GEM\_CREATE为例，ioctl=GSGPU\_GEM\_CREATE，structIoctl表示该命令码对应的数据大小，
 DRM\_IOCTL\_ioctl实际上就是经过DRM\_COMMAND\_BASE基地址偏移的命令码。
 每个命令码都对应具体的函数实现，通过DRM系统提供的DRM\_IOCTL\_DEF\_DRV宏完成联系。
-这个宏的作用是将驱动私有的 IOCTL 命令注册到 DRM 的统一命令表中，并关联对应的处理函数和权限标志。如图\ref{fig:ioctl def drv}。
+这个宏的作用是将驱动私有的 IOCTL 命令注册到 DRM 的统一命令表中，并关联对应的处理函数和权限标志。如图\ref{lst:drm-ioctl-drv}。
 这里实际上将DRM命令、处理该命令的内核函数指针、权限标志和命令的字符串名称分别存入cmd、func、flags和name域，在内核模块进行PCI设备注册时，
 将命令表封装进drm\_device结构体的数据中，并在用户态程序进行ioctl系统调用时根据DRM命令码调用对应的内核函数func实现。
 DRM命令码与内核处理函数func的映射关系已在表\ref{tab:IOCTL命令码表}中展示。
@@ -522,7 +522,7 @@ gralloc模块的HAL服务有绑定式（Binderized ）也有直通式（Passthro
 两种类型，本课题采用的是第二种。在具体的实现上，采用VINTF Fragments为本模块创建清单并与相应的hal相关联，并且需要设置rc文件并安装到/vendor/etc/init目录下，为init进程初始化
 提供执行依据（init进程会在加载init.rc主目录后立即加载/system/etc/init、/vendor/etc/init、/odm/etc/init等相关目录中的文件）。
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
   \includegraphics[width=0.8\textwidth]{gralloc调用栈v2.pdf}
   \caption{gralloc调用栈}
@@ -537,7 +537,7 @@ gsgpu的后端库，该后端包含的缓冲区操作函数如\ref{tab:gralloc�
 然后allocator和mapper会通过路径（2-3）调用drv辅助函数，辅助函数相关实现通过路径4基于gsgpu\_backend实现，该后端会通过路径5基于gsgpu的DRI驱动或者直接通过路径6调用libdrm的IOCTL命令，
 gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通过路径8实现用户态程序和DRM内核的交互。
 
-\begin{table}[H]  
+\begin{table}[h]  
   \centering
   \caption{gralloc模块后端接口表}
   \label{tab:gralloc模块后端接口表}
@@ -573,7 +573,7 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 而在缓冲区格式配置中，主要是配置一些渲染格式、纹理格式、光标格式与缓冲区标志相对应，常见的缓冲区类型如\ref{tab:缓冲区标志表}，
 这些标志用于标识缓冲区的不同使用场景，通常在图形和视频处理系统中使用。每个标志代表缓冲区的不同用途，允许驱动程序和硬件根据不同的用途进行优化或操作。
 
-\begin{table}[H]  
+\begin{table}[h]  
   \centering
   \caption{缓冲区标志表}
   \label{tab:缓冲区标志表}
@@ -597,10 +597,10 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 同时使用GSGPU\_GEM\_CLOSE关闭命令缓冲区的GEM对象句柄，并释放SDMA硬件上下文​。随后是DRI驱动资源释放，需要销毁渲染上下文和屏幕对象，并卸载DRI驱动库，并
 关闭设备节点。整体结构如图\ref{fig:lgbm后端-1}所示。
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
   \includegraphics[width=1\textwidth]{lgbm后端-1.pdf}
-  \caption{lgbm后端-1}
+  \caption{驱动初始化与关闭}
   \label{fig:lgbm后端-1}
 \end{figure}  
 
@@ -612,7 +612,7 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 在构造完DMA命令后，设置指令缓冲区指定命令缓冲区的起始地址以及设置硬件类型为XDMA，随后构造提交这批次DMA命令的命令块，主要是封装之前构建的DMA命令和
 指令缓冲区，随后通过GSGPU\_CS将命令块提交到硬件，并等待结果同步，进行超时或调用错误等处理。流程如图\ref{fig:lgbm后端-2}所示。
 
-\begin{table}[H]  
+\begin{table}[h]  
   \centering
   \caption{XDMA描述符}
   \label{tab:XDMA描述符}
@@ -633,10 +633,10 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
   \note{}
 \end{table}
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
   \includegraphics[width=1\textwidth]{lgbm后端-2.pdf}
-  \caption{lgbm后端-2}
+  \caption{XDMA内存搬运流程}
   \label{fig:lgbm后端-2}
 \end{figure}  
 
@@ -666,10 +666,10 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 步长等与每像素字节数乘以平面宽度与该平面的水平子采样因子向上取整。h\_subsampling是该平面的水平子采样系数，表示该平面的高度相对于原始图像宽度的缩放比例。
 b\_p\_pixel表示每个像素的字节数。
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
   \includegraphics[width=0.6\textwidth]{lgbm后端-3-1.pdf}
-  \caption{lgbm后端-3-1}
+  \caption{缓冲区创建流程}
   \label{fig:lgbm后端-3-1}
 \end{figure}  
 
@@ -679,10 +679,10 @@ b\_p\_pixel表示每个像素的字节数。
 createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性。也可以调用​DRM PRIME 标准接口​DRM\_IOCTL\_PRIME\_FD\_TO\_HANDLE转换文件描述符为 GEM 句柄。
 如图\ref{fig:lgbm后端-3-2}
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
   \includegraphics[width=1\textwidth]{lgbm后端-3-2.pdf}
-  \caption{lgbm后端-3-2}
+  \caption{缓冲区导入流程}
   \label{fig:lgbm后端-3-2}
 \end{figure}  
 
@@ -698,20 +698,20 @@ createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性
 若任一环节失败则关闭临时创建的 GEM 对象，释放相关内存。
 流程如图\ref{fig:lgbm后端-4-1}
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
-  \includegraphics[width=0.6\textwidth]{lgbm后端-4-1.pdf}
-  \caption{lgbm后端-4-1}
+  \includegraphics[width=0.5\textwidth]{lgbm后端-4-1.pdf}
+  \caption{缓冲区映射流程}
   \label{fig:lgbm后端-4-1}
 \end{figure} 
 
 解除缓冲区映射需要先使用munmap系统调用解除用户空间虚拟地址的映射，随后需要根据映射是否需要写回的标志位，判断是否需要将数据从GTT内存写回源缓冲区对象，若是则需要调用XDMA
 将修改后的数据写回，写完后使用GEM\_CLOSE关闭临时的GEM对象（即GTT内存的缓冲区对象），如图\ref{fig:lgbm后端-4-2}
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
-  \includegraphics[width=0.3\textwidth]{lgbm后端-4-2.pdf}
-  \caption{lgbm后端-4-2}
+  \includegraphics[width=0.5\textwidth]{lgbm后端-4-2.pdf}
+  \caption{映射解除流程}
   \label{fig:lgbm后端-4-2}
 \end{figure} 
 
@@ -726,7 +726,7 @@ createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性
 本地存储缓冲区和句柄的结构是两个哈希表，一个用于对gralloc\_handle\_t和gralloc\_imported\_handle\_info进行哈希映射，
 info包含缓冲区和该句柄引用该缓冲区的数量，用于支持对已注册缓冲区句柄的多次访问支持。另一个对句柄id和缓冲区进行哈希映射以实现快速访问。
 
-\begin{figure}[H]
+\begin{figure}[h]
   \centering
   \includegraphics[width=0.8\textwidth]{handle-buffer存储哈希表.pdf}
   \caption{handle-buffer存储哈希表}
@@ -747,7 +747,7 @@ count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体
 如安卓的HAL层的DRM\_FORMAT以及缓冲区标志符的命令有所不同，所以需要先进行转换以添加对当前缓冲区格式是否支持的判断。
 可以设计出如下的格式转换表\ref{tab:HAL格式转换表}和缓冲区标志转换表\ref{tab:缓冲区标志转换表}，此处仅列出一些常用和目前课题硬件支持的格式。
 
-\begin{table}[H]
+\begin{table}[h]
   \centering
   \caption{HAL格式转换表}
   \label{tab:HAL格式转换表}
@@ -766,7 +766,7 @@ count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体
   \note{}
 \end{table}
 
-\begin{table}[H]
+\begin{table}[h]
   \centering
   \caption{缓冲区标志转换表}
   \label{tab:缓冲区标志转换表}
