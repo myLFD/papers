@@ -124,7 +124,7 @@ cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
   \note{}
 \end{table}
 
-\begin{enumerate}[1)]
+\begin{enumerate}[label=\arabic*.]
   \item GSGPU\_GEM\_CREATE:在内核中为GPU设备分配并初始化一个GEM对象。
   \item GSGPU\_GEM\_MMAP：将GEM对象映射到用户空间，允许用户态直接访问显存。
   \item GSGPU\_CTX：创建/销毁GPU上下文，管理上下文资源。
@@ -143,6 +143,7 @@ cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
   \item GSGPU\_SCHED：配置调度策略，更改命令流执行顺序。
   \item GSGPU\_HWSEMA\_OP：操作硬件信号量，控制硬件级资源争用。
 \end{enumerate}
+
 由于这些功能大部分需要双向数据传输，所以大部分的命令码使用辅助宏DRM\_IOWR，可以用公式表示为：
 
 \#define DRM\_IOCTL\_ioctl

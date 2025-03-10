@@ -1839,7 +1839,7 @@
   \ifustc@degree@doctor
     \renewcommand\ustc@thesis@name{工程博士学位论文}
   \else
-    \renewcommand\ustc@thesis@name{专业硕士学位论文}
+    \renewcommand\ustc@thesis@name{工程硕士学位论文}
   \fi
   \ifustc@cjk@font@mac
     \providecommand\lishu{\CJKfamily{zhli}}
@@ -1906,7 +1906,7 @@
         \ifx\ustc@professional@type\@empty
           \null
         \else
-          \lishu （\ustc@professional@type ）%
+          % \lishu （\ustc@professional@type ）%
         \fi
         \par
       \endgroup
@@ -1926,7 +1926,8 @@
     {\fontsize{16bp}{31bp}\selectfont
       \begin{tabular}{@{}l@{\quad}l@{}}%
         \textsf{作者姓名：} & \ustc@author \\
-        \textsf{学科专业：} & \ustc@speciality \\
+        \textsf{专业类别：} & \ustc@speciality \\
+        \textsf{专业领域：} & \ustc@professional@type \\
         \ifx\ustc@practice@supervisor\@empty
           \textsf{导\hspace{2em}师：} & \ustc@supervisor@names \\
         \else
@@ -1959,7 +1960,7 @@
         \ifx\ustc@professional@type@en\@empty
           \null
         \else
-          (\ustc@professional@type@en)
+          % (\ustc@professional@type@en)
         \fi
         \par
       \endgroup
@@ -1980,6 +1981,7 @@
       \begin{tabular}{@{}l@{}}%
         Author:        \ustc@author@en \\
         Speciality:    \ustc@speciality@en \\
+        Major:    \ustc@professional@type@en \\
         \ustc@supervisor@en@line \\
         \ifx\ustc@practice@supervisor@en\@empty
         \else
