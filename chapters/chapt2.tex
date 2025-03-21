@@ -185,14 +185,13 @@ SurfaceView 是一种结合了 Surface 和 View 的组件。SurfaceView 的视�
 \subsubsection{SurfaceTexture}
 SurfaceTexture 将 Surface 和 GLES 纹理结合在一起，创建了一个 BufferQueue。
 应用程序充当这个 BufferQueue 的消费者。当生产者将新的缓冲区放入队列时，SurfaceTexture 会通知应用程序。
-应用程序可以依次释放先前占用的缓冲区，从队列中获取新的缓冲区，并执行 EGL 调用，使 GLES 能够将此缓冲区作为外部纹理使用。
+应用程序可逐步释放先前占用的缓冲区，从队列中获取新的缓冲区，并通过 EGL 调用，使 GLES 将其用作外部纹理。
 这种机制在 Android 7.0 中得到了增强，新增了对安全纹理视频播放的支持，允许对受保护的视频内容进行 GPU 后处理，
 从而提升了视频播放的安全性和性能。
 
 \subsubsection{TextureView}
-TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView 封装了 SurfaceTexture，
-负责处理回调以及获取新的缓冲区。在绘图时，TextureView 使用最近收到的缓冲区内容作为其数据源，
-并根据 View 状态指示在需要渲染的位置和方式进行渲染。由于 View 合成始终通过 GLES 执行，
+TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView 封装了 SurfaceTexture，负责回调处理和缓冲区获取。
+绘图时，它以最新接收的缓冲区作为数据源，并根据 View 状态决定渲染的位置和方式。由于 View 合成始终通过 GLES 执行，
 这意味着内容的更新可能导致其他 View 元素的重绘，从而确保了 UI 的一致性和动态性。
 
 所以，若需实现对龙芯硬件的支持，主要是在低级别组件上，需要实现gralloc接口，负责图形缓冲区的分配与共享、支持不同格式的像素布局、与 GPU 显存的映射等。
