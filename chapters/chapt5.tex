@@ -402,6 +402,36 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 % \end{figure}
 
 
+\section{性能测试}
+使用Native OpenGL ES程序测试，主要流程包括EGL环境初始化：创建原生窗口、EGL显示连接、创建渲染上下文等，
+OpenGL 资源初始化：窗口尺寸获取、纹理状态设置、生成测试纹理、投影矩阵配置等，在进行测试之前需要先进行预热，
+进行一定次数的渲染以排除硬件和缓冲区等影响。在主测试流程中，主要包括glclear清除颜色缓冲，glDrawArrays绘制基本图元，
+eglSwapBuffers将EGL颜色缓冲区发布到窗口。经测试eglSwapBuffers占据大部分运行时间。
+安卓中的eglSwapBuffers的流程涉及应用层、图形驱动、系统服务及硬件的协同工作，包括应用层调用将当前渲染完成的帧提交给显示系统、
+EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提交硬件层处理。
+由于GPU端处理性能有所差异，因此使用零面积三角形类型的图元可以最小化硬件性能差异，主要反映了​图形API调用本身的CPU端开销和驱动层处理机制的效率，
+如图\ref{fig:零面积交换缓冲区时间}。
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{零面积缓冲区交换时间.png}
+    \caption{零面积交换缓冲区时间}
+    \label{fig:零面积交换缓冲区时间}
+\end{figure}
+
+使用AOSP中的原生测试用例gl2\_copyTexImage,分别测量帧渲染时间以及交换缓冲区时间。其中帧渲染阶段包括使用FBO（Framebuffer Object）进行离屏渲染，
+将FBO内容复制到纹理中并进行渲染。去除预热阶段帧准备不稳定的时间数据，取较为稳定的运行时间的10次作为实验结果，如图\ref{fig:copytex测试结果}。
+而帧交换阶段的时间可以明显的看出前4次的时间较长，而在第五次下降到一个极低的时间，这是由于前4次缓冲区未完全复用，会触发新的缓冲区分配，而在第5次时缓冲区复用
+进入稳定状态，经测试缓冲区寿命也稳定为2（双缓冲模式），时间也趋于稳定。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{copytex测试结果.png}
+  \caption{copytex测试结果}
+  \label{fig:copytex测试结果}
+\end{figure}
+
+
 % \section{系统优化}
 % lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
 % 影响图形运行效率的瓶颈是访存，因此使用缓存复用
@@ -435,14 +465,6 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 % \section{启动时间优化}
 
 % \section{PAGE\_SIZE调整带来的影响评估}
-
-% \section{性能分析}
-
-% \section{兼容性测试}
-
-% \subsection{surfaceflinger关键流程分析}
-
-% \subsection{性能分析软硬件环境和方法} gtestopengl 测试套件
 
 % \subsection{结论}
 

@@ -862,27 +862,27 @@ count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体
   \KwOut{out\_handle}
   \SetKwProg{Fn}{Function}{}{}
   \Fn{allocate(descriptor， out\_handle)}{
-      \tcp{1. 格式解析与对象创建}
+      \tcp{格式解析与对象创建}
       \If{get\_resolved\_format\_and\_use\_flags() 失败}{\Return $-EINVAL$}
       \If{drv\_bo\_create() 失败}{\Return 错误码}
-      \tcp{2. 句柄初始化}
+      \tcp{句柄初始化}
       计算 num\_fds/num\_ints\;
       创建 hnd 并初始化 fds 为 -1\;
-      \tcp{3. 平面数据填充}
+      \tcp{平面数据填充}
       \For{每个平面}{
           填充 fd/stride/offset/size\;
           \If{失败}{Goto {destroy}}
       }
-      \tcp{4. 保留区处理}
+      \tcp{保留区处理}
       \If{需要保留区 \&\& create\_reserved\_region() 失败}{Goto {destroy}}
-      \tcp{5. 元数据与全局管理}
+      \tcp{元数据与全局管理}
       hnd.id $\leftarrow$ 原子递增\;
       填充其他元数据\;
       \If{创建 buffer 失败}{Goto {destroy}}
       加锁插入全局表\;
       *out\_handle $\leftarrow$ hnd\;
       \Return 0\;
-      \tcp{6. 失败逻辑处理}
+      \tcp{失败逻辑处理}
       Destroy : 
           清理句柄/bo\;
           \Return 错误码\;
