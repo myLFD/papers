@@ -26,7 +26,7 @@
 
 \subsection{测试流程}
 测试流程如图\ref{fig:实机测试流程}。由于目前没有模拟7A2000的模拟器，所以本课题测试及调试均在实机环境下完成。
-首先需要准备好安卓环境下的Native测试程序的可执行文件，这里的来源主要来自于AOSP的原生测试用例。启动测试机以及安卓镜像，进入命令行界面如图\ref{fig:安卓命令行界面},
+首先需要准备好安卓环境下的Native测试程序的可执行文件，这里的来源主要来自于AOSP的原生测试用例。启动测试机以及安卓镜像，进入命令行界面如图\ref{fig:安卓命令行界面}，
 在命令行中使用insmod加载内核驱动模块，通过上位机使用adb与运行的安卓系统进行连接，将测试程序推至相应的测试目录下，再运行相应的测试用例。如运行有问题则进行调试。
 
 \begin{figure}[h]
@@ -410,16 +410,16 @@ eglSwapBuffers将EGL颜色缓冲区发布到窗口。经测试eglSwapBuffers占�
 安卓中的eglSwapBuffers的流程涉及应用层、图形驱动、系统服务及硬件的协同工作，包括应用层调用将当前渲染完成的帧提交给显示系统、
 EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提交硬件层处理。
 由于GPU端处理性能有所差异，因此使用零面积三角形类型的图元可以最小化硬件性能差异，主要反映了​图形API调用本身的CPU端开销和驱动层处理机制的效率，
-如图\ref{fig:零面积交换缓冲区时间}。
+如图\ref{fig:零面积图元交换缓冲区时间}。
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.8\textwidth]{零面积缓冲区交换时间.png}
-    \caption{零面积交换缓冲区时间}
-    \label{fig:零面积交换缓冲区时间}
+    \includegraphics[width=0.8\textwidth]{零面积图元缓冲区交换时间.png}
+    \caption{零面积图元交换缓冲区时间}
+    \label{fig:零面积图元交换缓冲区时间}
 \end{figure}
 
-使用AOSP中的原生测试用例gl2\_copyTexImage,分别测量帧渲染时间以及交换缓冲区时间。其中帧渲染阶段包括使用FBO（Framebuffer Object）进行离屏渲染，
+使用AOSP中的原生测试用例gl2\_copyTexImage，分别测量帧渲染时间以及交换缓冲区时间。其中帧渲染阶段包括使用FBO（Framebuffer Object）进行离屏渲染，
 将FBO内容复制到纹理中并进行渲染。去除预热阶段帧准备不稳定的时间数据，取较为稳定的运行时间的10次作为实验结果，如图\ref{fig:copytex测试结果}。
 而帧交换阶段的时间可以明显的看出前4次的时间较长，而在第五次下降到一个极低的时间，这是由于前4次缓冲区未完全复用，会触发新的缓冲区分配，而在第5次时缓冲区复用
 进入稳定状态，经测试缓冲区寿命也稳定为2（双缓冲模式），时间也趋于稳定。
@@ -431,11 +431,27 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
   \label{fig:copytex测试结果}
 \end{figure}
 
+进一步对GPU的帧渲染能力进行测试，使用AOSP原生测试用例gl2\_perf，提供了不同的着色器以及纹理场景，其中核心的数据包括Mpps（每秒可绘制的百万像素量），主要衡量GPU 填充像素的吞吐量，
+与分辨率、着色器复杂度相关；DC60每帧允许的绘制调用次数，衡量 CPU/GPU 提交绘制命令的效率。如图\ref{fig:perf测试结果图}和图\ref{fig:perf测试结果图2}。
+其中Solid color和Solid gradient由于是纯色填充，所以不需要对纹理进行采样，因此仅测试纹理类型2。纹理类型1的复杂度要高于纹理类型2,因此1的执行效率要低于2。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.6\textwidth]{gl_perf测试结果图.png}
+  \caption{perf测试结果图-Mpps}
+  \label{fig:perf测试结果图}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.6\textwidth]{gl_perf测试结果图2.png}
+  \caption{perf测试结果图-DC60}
+  \label{fig:perf测试结果图2}
+\end{figure}
 
 % \section{系统优化}
 % lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
 % 影响图形运行效率的瓶颈是访存，因此使用缓存复用
-
 
 % \subsection{访存优化}
 % LG110支持4✖4 Tile格式的访存优化，如表\ref{tab:颜色缓冲区流水线配置}。为gralloc后端添加bo_create_with_modifiers实现接口，
