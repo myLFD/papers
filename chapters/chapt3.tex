@@ -10,12 +10,12 @@ Android图形系统作为移动端计算机的核心子系统，构建了从应�
 整个系统的运作可以分解为三个层次架构：应用层、图形处理层和硬件抽象层。
 应用层负责通过UI框架构建图形界面元素，图形处理层包括渲染引擎和合成器引擎，硬件抽象层主要是为这两个引擎提供支持。
 
-渲染引擎分析：渲染引擎​是负责将抽象的图形描述转化为最终可视像素的软件系统。Android渲染引擎默认使用的是skia，
-在SurfaceFlinger初始化过程中，会创建一个线程专门用于skia引擎的初始化并用于后续的图形绘制，
+渲染引擎分析：渲染引擎是负责将抽象的图形描述转化为最终可视像素的软件系统。Android渲染引擎默认使用的是Skia，
+在SurfaceFlinger初始化过程中，会创建一个线程专门用于Skia引擎的初始化并用于后续的图形绘制，
 在SkiaGLRenderEngine::create时，会依次执行eglGetDisplay获取EGL显示句柄，此句柄代表了要渲染的物理设备；eglInitialize初始化EGL环境，并获得EGL的主次版本号；
 eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版本信息、供应商版本信息以及支持的客户端API等，安卓还会使用EGL\_EXTENSIONS
-获取有关安卓特性的拓展并初始化；使用createEglContext在EGL中创建 OpenGL ES 上下文；然后使用eglMakeCurrent将指定的渲染上下文和表面设置为当前的函数。流程如图\ref{fig:skia_create过程}
-因此渲染引擎的正常运行需要OpenGL ES相关实现支持。
+获取有关安卓特性的拓展并初始化；使用createEglContext在EGL中创建 OpenGL ES 上下文；然后使用eglMakeCurrent将指定的渲染上下文和表面设置为当前的函数，
+流程如图\ref{fig:skia_create过程}。因此渲染引擎的正常运行需要OpenGL ES相关实现支持。
 
 \begin{figure}
   \centering
@@ -28,13 +28,13 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 其作为硬件混合渲染器的客户端，会通过跨进程通信的方式调用框架中的Icomposer实现和接口，从而完成与具体硬件混合渲染器的交互。因此合成器引擎需要硬件混合渲染器实现的支持。
 而合成器在合成图像时需要向系统申请图形缓存，因此也需要图形内存缓存分配的实现。
 
-由上，为了实现对SurfaceFlinger的支持，需要OpengGL ES实现、硬件抽象层需要完成gralloc和HWC服务。 
+由上，为了实现对SurfaceFlinger的支持，需要实现OpengGL ES、完成硬件抽象层中的Gralloc和HWC服务。 
 
 \subsection{架构差异分析}
 \label{sec:架构差异分析}
-本课题需要在LoongArch架构下实现，而Android多应用于ARM架构，ARM与LoongArch架构的图形系统有较大差异，具体表现为ARM架构下的GPU没有独立显存\cite{Inki2011}，
-而在LoongArch的内核中，是使用DRI框架来调用GPU，并且GPU有自己的独立显存。
-对LG110内存模型进行分析，LG110内存架构采用分层设计\ref{fig:LG110内存模型}，包含GPU本地VRAM和系统主存中的GTT内存模块。
+本课题需要在LoongArch架构下实现，而Android多应用于ARM架构，ARM与LoongArch架构的图形系统有较大差异，具体表现为ARM架构下的MaliGPU以及多数手机SOC集成的GPU
+没有独立显存\cite{Inki2011}，而在LoongArch的内核中，是使用DRI框架来调用GPU，并且GPU有自己的独立显存。
+对LG110内存模型进行分析，LG110内存架构采用分层设计如图\ref{fig:LG110内存模型}所示，包含GPU本地VRAM和系统主存中的GTT内存模块。
 其实现原理体现为：GPU的VRAM通过PCI总线直接映射至CPU的地址空间，允许CPU通过标准PCIe协议直接访问这部分显存资源；
 而GTT内存作为动态管理区域，借助页表机制将系统物理内存映射到虚拟地址空间，需经MMU转换后才能被访问。
 就GPU端的数据访问逻辑而言，其采用分级的页表管理策略。针对本地VRAM区域，页表项直接记录该存储块的物理地址，使得GPU可直接基于物理地址进行存取操作；
@@ -48,8 +48,8 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 \end{figure}
 
 因此，首先需要解决的是在LoongArch架构下，Android系统中显存和系统内存分配映射的问题。AndroidX86\cite{AndroidX86}
-很大程度上解决这个问题，该项目使用Mesa作为OpenGL ES实现，基于DRM和GEM实现了gralloc模块，成功的在x86架构下运行SurfaceFlinger并实现硬件加速\cite{XTYY201710015}。
-基于这个思路，我们也可以使用Mesa作为OpenGL ES实现以及mesa提供的GBM（General Buffer Manager）来管理缓冲区，
+很大程度上解决这个问题，该项目使用Mesa作为OpenGL ES实现，基于DRM和GEM实现了Gralloc模块，成功的在x86架构下运行SurfaceFlinger并实现硬件加速\cite{XTYY201710015}。
+基于这个思路，我们也可以使用Mesa作为OpenGL ES实现以及Mesa提供的GBM（General Buffer Manager）来管理缓冲区，
 为此需要LoongArch架构的DRM框架和用户态libdrm的支持。其中DRM框架需要基于安卓通用内核5.10实现。
 
 \subsection{安卓兼容性分析}
@@ -81,8 +81,8 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 \end{table}
 
 \section{图形系统整体设计}
-经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述。其中AOSP系统服务标注表示安卓系统服务部分，
-loongson硬件支持标注表示现有的龙芯显卡实现相关的软件，需要部分适配，需实现部分标注表示需要实现的模块。
+经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述。如图\ref{fig:图形栈总体结构图},其中AOSP系统服务（淡绿色标注部分）表示安卓系统服务部分，
+loongson硬件支持（紫色标注部分）表示现有的龙芯显卡实现相关的软件，需要部分适配，需实现部分（红色标注）表示需要实现的模块。
 
 \begin{figure}[h]
   \centering
@@ -96,34 +96,34 @@ loongson硬件支持标注表示现有的龙芯显卡实现相关的软件，需
 因此图形系统中最关键的服务进程就是SurfaceFlinger，负责管理图形缓冲区的合成与显示，如图\ref{fig:图形栈总体结构图}所示，它将来自不同应用的图形缓冲区进行合成，
 并将合成结果发送到显示设备。SurafaceFlinger包含两个主要引擎合成引擎CompositionEngine和渲染引擎renderEngine，其中renderEngine在Android Q版本时被移至libs下作为相对独立的模块，
 但仍然是SurfaceFlinger功能重要组成部分。CompositionEngine是作为HWC的客户端通过IPC方式调用HAL中HWC实现，而renderEngine主要是skia渲染引擎，该引擎通过EGL和OpenGL ES实现
-3D硬件加速，需要HAL的gralloc和显卡OpenGL ES实现的支持。因此，图形系统的正确运行一个重要的环节就是确保SurfaceFlinger的正确运行。
+3D硬件加速，需要HAL的Gralloc和显卡OpenGL ES实现的支持。因此，图形系统的正确运行一个重要的环节就是确保SurfaceFlinger的正确运行。
 
 而由上文可知，SurfaceFlinger的运行依赖于硬件抽象层和底层图形库。这其中有两个重要的模块，一个是HWC（硬件混合渲染器），是进行窗口合成和显示HAL层模块，其实现是特定于设备的，
 通常是由显示设备制造商完成。其用于合成从Surfaceflinger接收的图层，从而减少GPU执行的合成量。
-另一个模块是gralloc。它是Android中负责申请和释放GraphicBuffer的HAL层模块，
-由硬件驱动提供实现，为BufferQueue机制提供了基础。gralloc的主要组件包括Allocator，Mapper。Allocator 负责内存的分配和释放，
+另一个模块是Gralloc。它是Android中负责申请和释放GraphicBuffer的HAL层模块，
+由硬件驱动提供实现，为BufferQueue机制提供了基础。Gralloc的主要组件包括Allocator，Mapper。Allocator 负责内存的分配和释放，
 主要功能包括：根据请求的大小和格式分配内存缓冲区，负责跟踪已分配和空闲的内存块以及支持在多个进程之间共享缓冲区，使得不同的应用程序或组件能够访问同一块内存。
-Mapper负责将已分配的缓冲区映射到进程的虚拟地址空间。本课题需要实现支持龙芯硬件平台的gralloc和HWC模块的库以支持SurfaceFlinger的正确运行，即\ref{fig:图形栈总体结构图}中
+Mapper负责将已分配的缓冲区映射到进程的虚拟地址空间。本课题需要实现支持龙芯硬件平台的Gralloc和HWC模块的库以支持SurfaceFlinger的正确运行，即\ref{fig:图形栈总体结构图}中
 需实现部分标注。
 
-龙芯显卡驱动栈的方案，采用了mesa作为用户态驱动提供OpenGL ES实现和GBM加上DRM显示框架的方案。
-安卓的framework层以及库函数依赖的图形接口是由libdrm进行封装，包括上文提及的gralloc和HWC都是需要使用libdrm定义的接口。
+龙芯显卡驱动栈的方案，采用了Mesa作为用户态驱动提供OpenGL ES实现和GBM加上DRM显示框架的方案。
+安卓的framework层以及库函数依赖的图形接口是由libdrm进行封装，包括上文提及的Gralloc和HWC都是需要使用libdrm定义的接口。
 libdrm是一个用户态空间的库，提供了与 Linux 内核中的 DRM子系统交互的接口。它是 Linux 图形栈的核心组件之一（同样也是Android图形栈的方案），
 通过封装 DRM 的 IOCTL 系统调用，为用户空间程序提供了简单易用的 API。
 至于内核部分仍然是依赖linux内核的KMS和DRM。DRM/KMS 是 Linux 内核中用于管理图形硬件的子系统，提供了对 GPU、显示控制器和显示设备的统一抽象。在上层的系统级服务中，
 SurfaceFlinger是通过HWC（Hardware Composer）与DRM/KMS交互，HWC负责将图形缓冲区合成任务委托给硬件。在 DRM/KMS 框架下，HWC 通过 DRM 接口与内核通信，
 管理显示模式设置、缓冲区分配和显示同步等任务。KMS 负责配置显示控制器和显示设备的分辨率、刷新率等参数，而 DRM 则管理图形缓冲区的分配与渲染。
-OpenGL ES的实现是由用户态驱动mesa提供，而mesa实现的OpenGL ES接口在已有的X图形协议上已有过相关测试。
+OpenGL ES的实现是由用户态驱动Mesa提供，而Mesa实现的OpenGL接口在已有的X图形协议上已有过相关测试。
 
 %在后续章节中，将从驱动内核模块、用户态驱动、Android HAL层实现以及系统镜像定制等4个部分说明方案。
 
 \section{系统需求分析}
 
-由上节关键服务分析可知，需要在安卓硬件抽象层实现gralloc和HWC服务。安卓系统较为特殊，其本身对于模块的实现有着严格的接口定义和规范。
+由上节关键服务分析可知，需要在安卓硬件抽象层实现Gralloc和HWC服务。安卓系统较为特殊，其本身对于模块的实现有着严格的接口定义和规范。
 自Android Q版本开始，为了提供图形性能和增强对硬件的支持，对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，
-具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2，本课题基于gralloc4以及composer2.1实现。
-gralloc模块需要完成内存分配、缓冲区映射、缓冲区管理、性能优化等多方面的功能，hwcomposer模块则需要实现图层管理、显示输出、合成控制、与gralloc适应相关的功能。
-gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/hardware/interfaces/graphics/mapper下，
+具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2，本课题基于Gralloc4以及composer2.1实现。
+Gralloc模块需要完成内存分配、缓冲区映射、缓冲区管理、性能优化等多方面的功能，hwcomposer模块则需要实现图层管理、显示输出、合成控制、与Gralloc适应相关的功能。
+Gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/hardware/interfaces/graphics/mapper下，
 其中HAL接口表统计如表\ref{tab:gralloc模块HAL接口}。
 而HWC模块的实现较为复杂，包含服务端和客户端，服务端的实现集中在/hardware/interfaces/graphics/composer下，
 服务端钟具体EGL的调用是由硬件供应商实现并通过私有调用回安卓合成系统用于最终的缓冲区显示\cite{baiget2019architecture}，
@@ -131,7 +131,7 @@ gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/
 
 \begin{table}[h]
   \centering
-  \caption{gralloc模块HAL接口}
+  \caption{Gralloc模块HAL接口}
   \label{tab:gralloc模块HAL接口}
   \begin{tabular}{llll}
     \toprule

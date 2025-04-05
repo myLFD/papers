@@ -1,8 +1,8 @@
 % !TeX root = ../main.tex
 
 \chapter{龙芯安卓图形栈详细设计与实现}
-本章将详细介绍在现有龙芯硬件平台下，图形系统的三个重要组成部分：内核图形驱动模块，安卓gralloc模块和硬件混合渲染（HWC）模块。内核驱动模块负责对接用户态驱动
-和GPU固件之间的联系。而gralloc模块是根据龙芯硬件驱动向安卓上层libui库提供服务，硬件混合渲染(HWC)模块为安卓中进行窗口（Layer）合成和显示的HAL模块。
+本章将详细介绍在现有龙芯硬件平台下，图形系统的三个重要组成部分：内核图形驱动模块，安卓Gralloc模块和硬件混合渲染（HWC）模块。内核驱动模块负责对接用户态驱动
+和GPU固件之间的联系。而Gralloc模块是根据龙芯硬件驱动向安卓上层libui库提供服务，硬件混合渲染(HWC)模块为安卓中进行窗口（Layer）合成和显示的HAL模块。
 随后说明了如何构建龙芯显卡的OpenGL ES支持以及定制部分安卓系统镜像。
 
 \section{GPU驱动内核模块的实现}
@@ -324,8 +324,8 @@ drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为�
   \note{共计48项}
 \end{table}
 
-由于drm模块的接口变化为某个函数的增加或删除，部分结构体的属性变化，以及函数的参数变化。以空参数调用某个函数时，若函数相关实现已被删除，则测试代码\textbf{不会产生}编译错误，
-仅会在链接时产生错误，而函数存在时，则会产生编译错误，将此种情况命名为function；若某个函数的形参不存在或者结构体或者结构体的某个属性不存在时，则测试代码\textbf{会产生}编译错误，
+由于drm模块的接口变化为某个函数的增加或删除，部分结构体的属性变化，以及函数的参数变化。以空参数调用某个函数时，若函数相关实现已被删除，则测试代码不会产生编译错误，
+仅会在链接时产生错误，而函数存在时，则会产生编译错误，将此种情况命名为function；若某个函数的形参不存在或者结构体或者结构体的某个属性不存在时，则测试代码会产生编译错误，
 此种情况命名为type。这两种情况存在和不存在时目标对象时编译结果完全相反，结果判断如表\ref{tab:测试代码判断表}所示。针对不同实现缺失的情形，返回的编译结果完全相反。
 
 \begin{table}[h]
@@ -484,16 +484,16 @@ drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为�
 步长（stride）及DMA-BUF文件描述符等关键元数据。当硬件资源分配时，该模块与合成策略模块（如DrmKmsPlan）协同，决策如何将图层分配到不同的DRM平面
 （如Primary Plane用于主图层，Overlay Plane用于视频叠加），并处理缩放、旋转等硬件加速特性。
 
-该模块依赖于后端管理模块、合成器模块以及DRM管理模块
+该模块依赖于后端管理模块、合成器模块以及DRM管理模块。
 
 \subsubsection{合成器模块}
-该模块主要完成DrmKmsPlan的创建，在创建计划时通过对显示管线中的所有plane（平面）格式判断是否符合上层创建的Layer(图层)的需求，若符合则将设置plane、Layer、zpos（图层的顺序）
+该模块主要完成合成计划的创建，在创建计划时通过对显示管线中的所有plane（平面）格式判断是否符合上层创建的Layer(图层)的需求，若符合则将设置plane、Layer、zpos（图层的顺序）
 等参数并将新的计划加入显示队列。
 
 该模块依赖于DRM管理模块。
 
 \subsubsection{缓冲区信息适配模块}
-该模块主要用于获取不同硬件厂商的Gralloc实现，并提供统一接口获取图形缓冲区的元数据。主要使用hw\_get\_module，以GRALLOC\_HARDWARE\_MODULE\_ID（Android中gralloc模块的标识符
+该模块主要用于获取不同硬件厂商的Gralloc实现，并提供统一接口获取图形缓冲区的元数据。主要使用hw\_get\_module，以GRALLOC\_HARDWARE\_MODULE\_ID（Android中Gralloc模块的标识符
 ）来加载Gralloc模块。
 
 该模块由于是从Android硬件抽象层加载模块，所以不依赖于任何模块
@@ -573,12 +573,12 @@ drmModeAtomicFree属性状态清空、drmModeAtomicAddProperty设置同步栅栏
 
 \section{图形缓存分配模块}
 由于Android系统主要用于arm架构，而arm架构下的GPU多数没有自己的独立显存，系统服务SurfaceFlinger申请的帧缓存属于系统内存，而在本课题中，LoongArch架构下，
-GSGPU有自己的专属独立显存。因此首先要解决的是如何让Android的SurfaceFlinger能够在LoongArch架构下运行，而SurfaceFlinger依赖的缓冲区管理的HAL实现就是gralloc。
-依照Android 12的gralloc标准，gralloc模块接口定义有两部分，分别是mapper和allocator，
+GSGPU有自己的专属独立显存。因此首先要解决的是如何让Android的SurfaceFlinger能够在LoongArch架构下运行，而SurfaceFlinger依赖的缓冲区管理的HAL实现就是Gralloc。
+依照Android 12的Gralloc标准，Gralloc模块接口定义有两部分，分别是mapper和allocator，
 位于AOSP源码结构下的hardware/interface/graphic/mapper以及hardware/interface/graphic/allocator，
 其中定义了缓冲区的描述符的数据结构，创建、导入、释放缓冲区对象等。本节按照hal文件定义的接口实现了一个绑定式图形缓存分配器。
 
-gralloc模块的HAL服务有绑定式（Binderized ）也有直通式（Passthrough），区别在于，直通式会被编译成.so库文件，为system和vendor分区的进程和应用在运行时动态加载调用，两者是在
+Gralloc模块的HAL服务有绑定式（Binderized ）也有直通式（Passthrough），区别在于，直通式会被编译成.so库文件，为system和vendor分区的进程和应用在运行时动态加载调用，两者是在
 同一进程中，而绑定式会被编译成一个可独立运行的服务，类似于一个守护进程，然后相关服务进程或应用会通过HwBinder的IPC（进程间通信）方式来调用，是在两个独立的进程中。绑定式是Google
 在Android8.0时，为了方便升级系统框架所做的解耦技术。而绑定式又有默认直通式实现（defaultPassthroughServiceImplementation）以及 注册成服务（RegisterAsService）
 两种类型，本课题采用的是第二种。在具体的实现上，采用VINTF Fragments为本模块创建清单并与相应的hal相关联，并且需要设置rc文件并安装到/vendor/etc/init目录下，为init进程初始化
@@ -587,21 +587,21 @@ gralloc模块的HAL服务有绑定式（Binderized ）也有直通式（Passthro
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.8\textwidth]{gralloc调用栈v2.pdf}
-  \caption{gralloc调用栈}
+  \caption{Gralloc调用栈}
   \label{fig:gralloc调用栈}
 \end{figure}
 
 Android自身提供了共享内存的机制，native\_handle\_t是一个用于描述缓冲区的结构体，可以在进程之间传递缓冲区信息，gralloc\_handle\_t是Android 图形缓冲区分配器（Gralloc）中的句柄结构，
 它继承自 native\_handle\_t，用于管理共享图形缓冲区。gralloc\_handle\_t这一特性需要libdrm的支持，最低版本需要2.4.97之后才支持此特性，目前龙芯已有的libdrm的解决方案已有2.4.97，
 满足相关支持。
-然后gralloc\_handle\_t图形缓冲区的创建如图\ref{fig:gralloc调用栈}所示，分为gralloc前端和后端，使用一个drv作为中间层（主要是gralloc实现的一些辅助函数），具体实现会调用支持了
-gsgpu的后端库，该后端包含的缓冲区操作函数如\ref{tab:gralloc模块后端接口表}。Android系统上层应用程序在需要使用图形缓存时，使用路径1通过IPC跨进程通信向gralloc守护进程申请图形缓存，
+然后gralloc\_handle\_t图形缓冲区的创建如图\ref{fig:gralloc调用栈}所示，分为gralloc前端和后端，使用一个drv作为中间层（主要是Gralloc实现的一些辅助函数），具体实现会调用支持了
+gsgpu的后端库，该后端包含的缓冲区操作函数如\ref{tab:gralloc模块后端接口表}。Android系统上层应用程序在需要使用图形缓存时，使用路径1通过IPC跨进程通信向Gralloc守护进程申请图形缓存，
 然后allocator和mapper会通过路径（2-3）调用drv辅助函数，辅助函数相关实现通过路径4基于gsgpu\_backend实现，该后端会通过路径5基于gsgpu的DRI驱动或者直接通过路径6调用libdrm的IOCTL命令，
 gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通过路径8实现用户态程序和DRM内核的交互。
 
 \begin{table}[h]  
   \centering
-  \caption{gralloc模块后端接口表}
+  \caption{Gralloc模块后端接口表}
   \label{tab:gralloc模块后端接口表}
   \begin{tabular}{ll}
     \toprule
@@ -670,7 +670,7 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 
 独立处理GPU加速的内存传输操作，利用了LG110硬件XDMA的特性\cite{胡庆海2016,张凯2015}，实现从一个源内存地址到目标内存地址的数据搬运，支持Linear和Tiled 数据格式存储。
 首先需要校验参数与准备资源，计算能处理的最大命令数量（不能超过最大单次传输尺寸）。其次将源缓冲区和目标缓冲区分别通过GSGPU\_GEM\_VA的VA\_OP\_MAP映射到GPU的虚拟空间，以便于从GPU中获取这两个地址，
-但是在目标缓冲区上添加WRITEABLE标志表示这是写入的标志。随后构造XDMA命令如\ref{tab:XDMA描述符}，按顺序构造完命令后循环构造DMA命令。
+但是在目标缓冲区上添加WRITEABLE标志表示这是写入的标志。随后构造XDMA命令如表\ref{tab:XDMA描述符}所示，按顺序构造完命令后循环构造DMA命令。
 在构造完DMA命令后，设置指令缓冲区指定命令缓冲区的起始地址以及设置硬件类型为XDMA，随后构造提交这批次DMA命令的命令块，主要是封装之前构建的DMA命令和
 指令缓冲区，随后通过GSGPU\_CS将命令块提交到硬件，并等待结果同步，进行超时或调用错误等处理。流程如图\ref{fig:lgbm后端-2}所示。
 
@@ -714,7 +714,7 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 在此不过多赘述。而第三种是创建线性缓冲区，需要先初始化缓冲区布局，为图形缓冲区对象计算和设置与格式相关的属性，如步幅（stride）、大小（size）、偏移量(offset)。
 步幅是指从缓冲区中某一行的开始位置到下一行开始位置的字节数。换句话说，它是缓冲区内每行数据的跨度，它告诉我们如何从当前行跳到下一行。
 偏移量是指从缓冲区的起始位置到某个数据元素的内存地址的距离。大小表示缓冲区所占用的内存空间的大小，通常以字节为单位。
-在内存分配参数上选择GTT内存域，并执行GSGPU\_GEM\_CREATE内核调用，创建GTT内存。如图\ref{fig:lgbm后端-3-1}。
+内存分配参数选择GTT内存域，并执行GSGPU\_GEM\_CREATE内核调用，创建GTT内存。如图\ref{fig:lgbm后端-3-1}。
 
 缓冲区销毁bo\_destroy是将显卡虚拟空间中的缓冲区对象销毁，将需要销毁的缓冲区对象句柄调用GEM\_CLOSE即可。
 缓冲区释放bo\_release是将用户态中的资源释放，但不清除内核态的资源，调用DRI驱动destroyImage方法实现。
@@ -739,7 +739,7 @@ b\_p\_pixel表示每个像素的字节数。
 缓冲区导入就是从外部缓冲区对象中导入缓冲区，包括获取缓冲区的宽、高、格式、步长等重要属性，是实现缓冲区共享的一个核心功能。
 可以使用DRI驱动导入，也可以直接向内核态申请。从流程上需要考虑兼容性，当时用修饰符描述时，可以使用DRI的拓展特性createImageFromFds或者
 createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性。也可以调用​DRM PRIME 标准接口​DRM\_IOCTL\_PRIME\_FD\_TO\_HANDLE转换文件描述符为 GEM 句柄。
-如图\ref{fig:lgbm后端-3-2}
+如图\ref{fig:lgbm后端-3-2}所示。
 
 \begin{figure}[h]
   \centering
@@ -797,12 +797,12 @@ info包含缓冲区和该句柄引用该缓冲区的数量，用于支持对已�
 
 \subsubsection{Allocator模块}
 由HAL的设计可知，IAllocator中对于allocate方法的定义为
-allocate(BufferDescriptor descriptor， uint32\_t count) generates (Error error， uint32\_t stride， vec<handle> buffers);
+allocate(BufferDescriptor descriptor,uint32\_t count) generates (Error error,uint32\_t stride,vec<handle> buffers);
 该方法根据 BufferDescriptor描述符分配指定数量（count）的图形缓冲区，返回原始句柄数组、行步长（stride）及错误状态，其设计需兼顾 硬件适配性、资源管理 及 跨层级数据传递。
 方法中的generates表明需要实现一个异步回调接口，descriptor缓冲区描述符是Mappper模块实现的对缓冲区数据结构的序列化后的二进制字节流，基本类型为
 uint8\_t。这是安卓为了跨进程传输所设计，也是因为HIDL接口不支持直接传递复杂结构体（如嵌套对象或动态类型），只能支持基本类型和数组。
 count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体的实现时会重载增加hidlCb参数以实现异步回调的功能。
-需要先对gralloc后端驱动进行检查，若未完成初始化，则返回NO\_RESOURCES表示无硬件资源的错误。若驱动已完成初始化，则进行描述符转换，
+需要先对Gralloc后端驱动进行检查，若未完成初始化，则返回NO\_RESOURCES表示无硬件资源的错误。若驱动已完成初始化，则进行描述符转换，
 将HAL层驱动传入的uint8\_t类型的descriptor解码成缓冲区数据结构体BufferDescriptorInfo类型的description。同样，若是接码出现异常则需要
 返回BAD\_DESCRIPTOR表示描述符错误。由于上层接口有着count数量的缓冲区进行处理，因此需要初始化一个handle向量用于存储多个句柄。
 下面针对单个缓冲区的分配进行描述。接码的description中信息需要转换，convertDescriptor就是是将上层传入的安卓HAL描述符转换成底层通用的描述符。
@@ -851,7 +851,7 @@ count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体
 回滚已分配的所有handle以保证数据的一致性，主要是使用native\_handle\_close和native\_handle\_delete请除当前句柄的资源，并获取已分配至handles向量中的
 所有句柄进行清空缓冲区的操作。若创建成功，则继续初始化元数据Metadata的信息，这个主要是为一些优化方法提供支持。
 如果都创建成功则使用handle的setTo方法将创建成功的handle句柄添加至handles向量作为分配缓冲区成功的结果。
-而驱动的allocate的算法设计如\ref{algo:GRALLOC_DRIVER::ALLOCATE}，主要是使用上一节所述的支持龙芯的gralloc后端方法完成缓冲区的创建，获取宽、高、格式、步长、压缩标志等信息用于
+而驱动的allocate的算法设计如\ref{algo:GRALLOC_DRIVER::ALLOCATE}，主要是使用上一节所述的支持龙芯的Gralloc后端方法完成缓冲区的创建，获取宽、高、格式、步长、压缩标志等信息用于
 初始化handle句柄并创建gralloc\_buffer等。
 
 \begin{algorithm}
@@ -953,7 +953,7 @@ VINTF 文件中的信息会与设备上已安装的 HAL 实现进行对比以验
 
 \section{构建OpenGL ES支持}
 
-龙芯现有的驱动实现基于mesa的gallium架构。
+龙芯现有的驱动实现基于Mesa的gallium架构。
 gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
 state tracker是状态跟踪器，负责将将高级图形API的调用转换为Gallium内部的具体的管道操作。
 而驱动层是直接与GPU硬件交互的部分，负责硬件指令生成，就是将Gallium的中间命令转换为GPU特定的指令集；着色器编译，将NIR中间表示编译为GPU原生代码，并进行优化；
@@ -961,21 +961,21 @@ state tracker是状态跟踪器，负责将将高级图形API的调用转换为G
 gallium架构下实现OpenGL ES功能的核心组件。而winsys层主要包括显存管理、命令提交与同步、显示输出管理和操作系统平台适配上。
 因此在安卓上OpenGL ES实现复用驱动层的实现即可。因此本节仅描述如何构建OpenGL ES支持，并简述目标动态安装库。
 
-龙芯mesa的版本为18.3.6，而由于现有的安卓版本为12.0.0，安卓API版本为31对应的mesa版本为20.3.4，并且由于安卓新的编译方式Soong的加入，
-mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用框架外编译的方式。为考虑后续版本的兼容性，因此在现有的mesa18.3.6上采用
-mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。使用安卓框架外编译去生成动态库文件，即用cross-compile配置mesa交叉编译脚本aosp-cross，再使用原生ninja编译规则生成目标安装目录install，
-将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯mesa版本提供支持。
+龙芯Mesa的版本为18.3.6，而由于现有的安卓版本为12.0.0，安卓API版本为31对应的Mesa版本为20.3.4，并且由于安卓新的编译方式Soong的加入，
+Mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用框架外编译的方式。为考虑后续版本的兼容性，因此在现有的Mesa18.3.6上采用
+Mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。使用安卓框架外编译去生成动态库文件，即用cross-compile配置Mesa交叉编译脚本aosp-cross，再使用原生ninja编译规则生成目标安装目录install，
+将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯Mesa版本提供支持。
 
-mesa编译框架如图\ref{fig:mesa编译框架}，AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的mesa交叉编译规则，
-按照mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
+Mesa编译框架如图\ref{fig:mesa编译框架}，AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的Mesa交叉编译规则，
+按照Mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.8\textwidth]{mesa编译框架.jpg}
-  \caption{mesa编译框架}
+  \caption{Mesa编译框架}
   \label{fig:mesa编译框架}
 \end{figure}
 
-而mesa的目标动态库数据结果如下：
+而Mesa的目标动态库数据结果如下：
 
 libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
 

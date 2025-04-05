@@ -1,9 +1,9 @@
 % !TeX root = ../main.tex
 
 \chapter{相关技术}
-本章将介绍安卓图形栈实现的相关技术，主要包括三个部分，第一部分介绍开源安卓项目（Android Open Source Project），主要包括安卓系统架构、Soong构建系统、Native程序运行环境bionic以及
-AOSP源码树结构。第二部分主要介绍安卓图形系统结构，分别从低级别组件和高级别组件介绍图形系统所涉及的基本元素，分析实现龙芯显卡支持涉及哪些组件。
-最后第三部分说明了现有龙芯GPU软件栈，依次介绍了核模块的功能与类型，MESA提供的数个核心组件，DRM框架和libdrm。
+本章将介绍安卓图形栈实现的相关技术，主要包括三个部分：第一部分介绍开源安卓项目AOSP（Android Open Source Project），主要包括安卓系统架构、Soong构建系统、Native程序运行环境bionic以及
+AOSP源码树结构。第二部分介绍安卓图形系统结构，分别从低级别组件和高级别组件介绍图形系统所涉及的基本元素，分析实现龙芯显卡支持涉及哪些组件。
+最后第三部分说明了现有龙芯GPU软件栈，依次介绍了内核模块的功能与类型，Mesa提供的数个核心组件，DRM框架和libdrm。
 
 \section{AOSP}
 
@@ -15,7 +15,7 @@ AOSP源码树结构。第二部分主要介绍安卓图形系统结构，分别�
 \end{figure}
 
 AOSP（Android Open Source Project），即安卓开源项目\cite{android_setup}。
-从架构上来看，Android系统的架构自下而上可以分为五个主要层次：内核层、硬件抽象层、系统运行库层（包括安卓运行时库）、应用程序框架层和应用程序层，如图\ref{fig:安卓系统架构图}。
+从架构上来看，Android系统的架构自下而上可以分为五个主要层次：内核层、硬件抽象层、系统运行库层（包括安卓运行时库）、应用程序框架层和应用程序层，如图\ref{fig:安卓系统架构图}所示。
 Android 的内核基于 Linux 操作系统，Linux 内核负责系统资源的管理，如 CPU 调度、内存管理、设备管理、文件系统和网络通信等，并且包含了一些安卓特有的功能。
 硬件抽象层是对底层实现的屏蔽，通过硬件逻辑和硬件接口的分离，实现上层应用对具体硬件无关的调用。
 系统运行库包括核心库和 Android 运行时（ART），安卓中部分库是c/c++实现的需要这些核心库的支持，而ART 是 Android 的应用程序运行时，负责应用程序的执行，取代了旧版的 Dalvik 虚拟机。
@@ -49,7 +49,7 @@ Soong 是 Android 构建系统的一部分，主要用于替代旧的 Makefile �
 同时支持多种模块类型，包括 Java、C/C++ 和资源文件等，适应了 Android 多样化的构建需求。开发者可以通过编写新的 Blueprint 文件来扩展 Soong 的功能。
 Soong 还与 Gradle 集成，为 Android 应用的构建提供了更好的支持，使得 Android 应用开发更加灵活和便捷。结构如图\ref{fig:Soong结构示意图}
 
-\subsubsection{bionic}
+\subsubsection{Bionic}
 
 Bionic 是 Android 操作系统中的 C 标准库，实现了 POSIX 兼容的功能。它是 Android 平台的核心组件之一，具有轻量、高效等特点，
 满足移动设备的特定需求，并优化性能和资源使用。Bionic 的设计考虑了 Android 的多样性和复杂性，提供基础的系统调用和库函数，
@@ -100,11 +100,11 @@ AOSP源码树的核心包含以下几个部分：
 
   external/libdrm:图形栈中libdrm的实现，其中包含了gsgpu的实现接口以及相关测试用例
 
-  external/mesa:图形栈中mesa的实现，mesa中包含了gallium驱动、gbm实现以及glapi等，是图形栈用户态驱动的核心库，具体会在后章节详细介绍
+  external/mesa:图形栈中Mesa的实现，Mesa中包含了gallium驱动、gbm实现以及glapi等，是图形栈用户态驱动的核心库，具体会在后章节详细介绍
 
-  external/loong-gpucomp:集成了龙芯显卡的后端实现LLVM，主要用于在mesa编译时使用。
+  external/loong-gpucomp:集成了龙芯显卡的后端实现LLVM，主要用于在Mesa编译时使用。
 
-  external/lgbm:本课题关于龙芯安卓gralloc图形内存分配器实现，根据framework框架中的gralloc4标准实现。
+  external/lgbm:本课题关于龙芯安卓Gralloc图形内存分配器实现，根据framework框架中的Gralloc4标准实现。
 
   external/lhwcomposer:龙芯安卓硬件混合渲染器，主要实现了合成器的服务端部分，包括设备注册与初始化以及验证与显示等功能。
 
@@ -138,10 +138,10 @@ Android 的图形系统是为移动设备特别设计的，结构如图\ref{fig:
 
 \subsection{低级别组件}
 
-\subsubsection{BufferQueue 和 gralloc}
+\subsubsection{BufferQueue 和 Gralloc}
 BufferQueue 作为 Android 图形架构的核心通信机制，实现了生产者-消费者模型的高效数据流转。
 该组件通过双缓冲/三缓冲策略协调图形内容生成端（如应用渲染线程）与消费端（如显示合成模块）的异步协作，有效消除帧间竞争问题。
-gralloc（图形内存分配器）通过硬件抽象层接口实现跨进程图形缓冲区的生命周期管理。其核心功能包括：基于 DMA-BUF 框架的物理连续内存分配、
+Gralloc（图形内存分配器）通过硬件抽象层接口实现跨进程图形缓冲区的生命周期管理。其核心功能包括：基于 DMA-BUF 框架的物理连续内存分配、
 YUV/RGB 等像素格式的硬件对齐优化、安全上下文下的内存访问权限控制。
 此分层架构使 Android 能适配不同 GPU 的异构内存架构，同时确保 SurfaceFlinger 合成效率。
 
@@ -194,8 +194,8 @@ TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView �
 绘图时，它以最新接收的缓冲区作为数据源，并根据 View 状态决定渲染的位置和方式。由于 View 合成始终通过 GLES 执行，
 这意味着内容的更新可能导致其他 View 元素的重绘，从而确保了 UI 的一致性和动态性。
 
-所以，若需实现对龙芯硬件的支持，主要是在低级别组件上，需要实现gralloc接口，负责图形缓冲区的分配与共享、支持不同格式的像素布局、与 GPU 显存的映射等。
-同时需要实现hwcomposer的接口，完成图层合成的硬件加速，显示时序控制等功能，并保证SurfaceFLinger能够正确调用HWC和gralloc。
+所以，若需实现对龙芯硬件的支持，主要是在低级别组件上，需要实现Gralloc接口，负责图形缓冲区的分配与共享、支持不同格式的像素布局、与 GPU 显存的映射等。
+同时需要实现hwcomposer的接口，完成图层合成的硬件加速，显示时序控制等功能，并保证SurfaceFLinger能够正确调用HWC和Gralloc。
 在图形编程接口上，而由于现有的硬件实现仅有OpenGL和OpenGL ES,暂不对vulkan作支持，需要通过通过科纳斯标准 API暴露GPU 功能，确保SurfaceFlinger的渲染引擎 Skia后端支持龙芯GPU，
 这些具体支持实现将在后续章节中介绍。
 
@@ -232,23 +232,23 @@ TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView �
 而安全和监控模块用于系统安全、身份验证、访问控制和资源监控的功能模块
 
 \subsection{MESA}
-mesa\cite{mesa}是由Brian Paul于1993年8月发起的一个开源图形API软件实现，提供了一整套图形库和驱动程序，允许开发者使用标准的图形 API（如OpenGL,OpenGL ES，Vulkan等）
+Mesa\cite{mesa}是由Brian Paul于1993年8月发起的一个开源图形API软件实现，提供了一整套图形库和驱动程序，允许开发者使用标准的图形 API（如OpenGL,OpenGL ES，Vulkan等）
 来进行图形渲染，而无需直接依赖硬件制造商的专有驱动程序，现由freedesktop维护并被广泛采用。
-由于其本身的设计初衷就是为了提供硬件无关的图形渲染能力，所以mesa是一个跨平台跨操作系统的图形库，
-可以为多个硬件平台提供支持，包括intel、amd、Nvidia等驱动均在mesa上有相关的开源实现，操作系统上支持Android、Linux、BSD 系统等。
+由于其本身的设计初衷就是为了提供硬件无关的图形渲染能力，所以Mesa是一个跨平台跨操作系统的图形库，
+可以为多个硬件平台提供支持，包括intel、amd、Nvidia等驱动均在Mesa上有相关的开源实现，操作系统上支持Android、Linux、BSD 系统等。
 其中有多个核心组件：
 
 \subsubsection{驱动框架}
 Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Gallium3D 框架），另一部分是新的Gallium驱动。
 经典的Mesa驱动是紧耦合的，这意味着要在现有驱动基础上实现一个其它的API规范几乎要重写这个驱动，而Gallium3D实现一套暴露现代GPU的硬件功能的API，将依赖潜在操作系统的部分分隔开来，
 使得可以支持各种操作系统。如图\ref{fig:mesa驱动结构图}。在经典结构中，应用程序（APP）通过 DRI驱动程序与图形硬件进行交互，DRI 驱动程序直接管理硬件，并通过 DRM与与显示硬件进行通信。
-而在Gallium 3D 结构中，有State Tracker是mesa核心和Gallium3D的接口，负责将MESA状态（混合模式，纹理状态等）和绘制命令（例如Gldrawarrays和gldrawpixels）转换为管道对象和操作
+而在Gallium 3D 结构中，有State Tracker是Mesa核心和Gallium3D的接口，负责将MESA状态（混合模式，纹理状态等）和绘制命令（例如Gldrawarrays和gldrawpixels）转换为管道对象和操作
 而HW driver是GPU硬件的驱动，负责将上层的状态、纹理等翻译成GPU硬件可以识别的信息，而Winsys提供了与内核交互的接口，准确来说也是使用libdrm的接口，实现对操作系统的支持。
 
 \begin{figure}[h]
   \centering
   \includegraphics[width=0.8\textwidth]{mesa驱动结构图.pdf}
-  \caption{mesa驱动结构图}\label{fig:mesa驱动结构图}
+  \caption{Mesa驱动结构图}\label{fig:mesa驱动结构图}
 \end{figure}
 
 \subsubsection{OpenGL ES}
@@ -310,6 +310,6 @@ GEM（Graphics Execution Manager）是图形缓冲区管理模块，为操作系
 \section{本章小结}
 本章围绕着课题分别介绍了AOSP安卓开源项目、安卓图形系统结构和GPU软件栈等安卓图形相关技术。在AOSP部分，介绍了AOSP构建系统与Native程序运行环境、
 AOSP源码树介绍两个部分，这些技术是在安卓上实现对龙芯显卡的支持的基础。接着介绍现有的安卓图形系统结构，分别从低级别组件和高级别组件两部分进行介绍，介绍了一些常见的系统组件。
-在最后GPU软件栈中，分别从核模块、MESA、libdrm、DRM4个部分说明除安卓框架外还需要哪些软件实现对龙芯硬件的支持。
+最后介绍了安卓GPU软件栈中与硬件支持实现相关的四个关键组件：内核模块、Mesa、libdrm、DRM。
 
 %dri直接渲染架构还未介绍
