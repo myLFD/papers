@@ -32,33 +32,33 @@
 \end{abstract}
 
 \begin{abstract*}
-  With the paradigm shift in information technology, the demand for mobile graphics processing has been growing exponentially. 
-  As a mobile operating system occupying 76\% of the global market share,
-  Android, by virtue of the performance and compatibility of its graphics subsystem, 
-  has become a key factor influencing user experience. Among these, the GPU driver, 
-  serving as the core component that coordinates performance and stability,
-  directly determines the performance boundary of the graphics rendering pipeline. 
-  However, in the commercial Android ecosystem, technical barriers set by mainstream GPU manufacturers 
-  have made it extremely difficult to obtain hardware specification documents and driver source code,
-  which severely constrains research on graphics systems based on independent architectures. 
-  In response to this situation, this study achieves the complete adaptation of the Loongson GPU under 
-  the LoongArch instruction set architecture to the Android S system
-  , holding significant research value and practical importance. Centered on the Android graphics system and 
-  based on the LoongArch architecture and Loongson GPU, this thesis covers the following work:
-  
-  1.Designing and implementing the graphics driver kernel module, specifying the interaction command codes between 
-  the DRM kernel module and user space, thereby enabling the efficient transmission of GPU commands from 
-  user space to the GPU processor.
-  
-  2.Based on the Loongson hardware interface, implementing the essential Android modules—namely the Hardware Composer (HWC) and the Graphics Buffer Allocator (Gralloc).
-  Among these, the graphics buffer allocator utilizes buffer reuse and zero-copy techniques to optimize buffer allocation and mapping efficiency;
-  the hardware composer serves as a compositor, providing frame composition and display support for upper-level Android applications.
-  
-  3.Resolving the software stack adaptation issue of the Loongson platform’s Android system, adding OpenGL ES support, and customizing part of the Android system image according to hardware features,
-  successfully establishing the system display pathway and creating a complete Android runtime environment supporting the Loongson GPU.
-  
-  To verify the correctness and usability of the system, this thesis conducts functionality tests on each module based on the official Android test suite.
-  The results indicate that this study has taken the lead in successfully constructing and stably operating an Android graphics system supporting the Loongson GPU on the LoongArch platform.
-  This achievement has enabled efficient collaboration between Loongson LG-series GPUs and the Android framework, laying a solid foundation for subsequent deployment of Android systems and ecosystem enhancement on the LoongArch platform.
+  With the paradigm shift in information technology, the demand for mobile graphics processing has seen exponential growth. 
+  As Android holds a 76\% share of the global mobile operating system market, the performance and compatibility of its graphics 
+  subsystem have become key factors influencing user experience. Among them, the GPU driver, as a core component balancing performance and stability, 
+  directly determines the efficiency boundaries of the graphics rendering pipeline. However, in the commercial Android ecosystem, 
+  the technological barriers imposed by mainstream GPU vendors make it extremely difficult to access hardware specifications and driver source code, 
+  which severely restricts research on graphics systems based on independent architectures.
+
+In response to this situation, the complete adaptation of Android S to the Loongson GPU under the LoongArch instruction 
+set architecture holds significant research value and practical relevance. Based on the LoongArch architecture and Loongson GPU, 
+this thesis carries out the following work centered around the Android graphics system:
+
+1.Designed and implemented a GPU driver kernel module, including the design of command codes for interaction between the DRM kernel module and user space, 
+achieving efficient transmission of GPU commands from user space to the GPU processor. To support different kernel versions, 
+this work proposes a multi-version adaptation scheme based on changes in kernel module interfaces, addressing discrepancies caused 
+by kernel version variations.
+
+2.Implemented key Android-dependent modules based on Loongson hardware interfaces—namely the Hardware Composer (HWC) and the Graphics 
+Memory Allocator (Gralloc). The graphics memory allocator adopts buffer reuse and zero-copy techniques to optimize buffer allocation 
+and mapping efficiency. The hardware composer serves as a compositor, providing frame composition and display support for upper-layer Android applications.
+
+3.Resolved software stack adaptation issues for the Android system on the Loongson platform, added support for OpenGL ES, 
+and customized parts of the Android system image based on hardware characteristics. The system display pipeline was successfully established, 
+constructing a complete Android runtime environment with Loongson GPU support.
+
+To validate the correctness and usability of the system, this thesis conducted functional testing on each module using the official Android test suite. 
+Results show that this work is the first to successfully build and stably run an Android graphics system with Loongson GPU support on the LoongArch platform. 
+This research achieves efficient coordination between the Loongson LG series GPU and the Android framework, 
+laying a solid foundation for future Android system deployment and ecosystem development on the LoongArch platform.
   
 \end{abstract*}

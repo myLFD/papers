@@ -951,7 +951,9 @@ VINTF 文件中的信息会与设备上已安装的 HAL 实现进行对比以验
 是与内存分配器相关的接口，instance元素表示接口的实例名称是 default，通常 HAL 可以有多个实例，但这里指定的是默认实例。而Mapper仅在<transport>子项有所区别，由于Mapper实现的是
 直通式，所以是passthrough，且包含arch元素为32+64，表示该接口支持 32 位和 64 位架构。
 
-\section{构建OpenGL ES支持}
+\section{OpenGL ES}
+
+\subsection{构建安卓OpenGL ES支持}
 
 龙芯现有的驱动实现基于Mesa的gallium架构。
 gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
@@ -970,7 +972,7 @@ Mesa编译框架如图\ref{fig:mesa编译框架}，AOSP编译框架会自动监�
 按照Mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{mesa编译框架.jpg}
+  \includegraphics[width=0.8\textwidth]{mesa编译框架.pdf}
   \caption{Mesa编译框架}
   \label{fig:mesa编译框架}
 \end{figure}
@@ -989,6 +991,57 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 
 上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务调用。而在安卓的命名空间习惯中，由于驱动来源不止mesa项目一种，所以需要将libEGL.so重命名为libGLES\_mesa.so，
 以区别不同项目的命名空间。
+
+\subsection{瓦片访存优化}
+LG110是Tile-Based架构的GPU，支持将几何数据转换成小矩形区域，目前已支持4✖4以及8x8的Tile格式,如表\ref{tab:颜色缓冲区流水线配置}。
+Tile-Based Rendering就是可以尽量减少片元着色期间的GPU的外部内存访问量，如图\ref{fig:不同GPU架构数据流向},Immediate架构在执行片元着色时会多次写入主存导致访存压力，
+而Tile-based架构的GPU会在tile内一次性光栅化所有的三角形。将片元结果缓存在片上Tile缓冲区，等Tile渲染完再写回主存。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{不同GPU架构数据流向.pdf}
+  \caption{不同GPU架构数据流向}
+  \label{fig:不同GPU架构数据流向}
+\end{figure}
+
+\begin{table}[h]
+    \centering
+    \caption{颜色缓冲区流水线配置}
+    \label{tab:颜色缓冲区流水线配置}
+    \begin{tabular}{lllp{3cm}}
+      \toprule
+      位域 & 名称 & 访问 & 描述 \\
+      \midrule
+      1:0 & tilem & RW & 0:线性格式 \newline
+                        1: 4x4 的 Tile 格式 \newline
+                        2: 8x8 的 Tile 格式\\
+      \bottomrule
+    \end{tabular}
+    \note{}
+\end{table}
+
+在安卓图形架构中，使用的是直接渲染框架，因此对Tile-based渲染需要用户态驱动Mesa共同完成支持即可。
+在进行纹理资源创建时选择GSGPU\_SURF\_MODE\_TILED4或GSGPU\_SURF\_MODE\_TILED8，如\ref{lst:tile-choosing}，除光标等特殊图层外，其余纹理均使用Tile模式提高访存效率。
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray}
+}
+
+\begin{lstlisting}[caption={tile模式选择}, label={lst:tile-choosing}]
+...
+if(templ->bind & PIPE_BIND_CURSOR)
+  return GSGPU_SURF_MODE_LINEAR;
+...
+return GSGPU_SURF_MODE_TILED4;
+\end{lstlisting}
 
 \section{安卓系统镜像定制}
 由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit， MMU）采用页式管理来处理 GPU 所使用的内存，

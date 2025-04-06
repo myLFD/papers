@@ -454,25 +454,6 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
 % lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
 % 影响图形运行效率的瓶颈是访存，因此使用缓存复用
 
-% \subsection{访存优化}
-% LG110支持4✖4 Tile格式的访存优化，如表\ref{tab:颜色缓冲区流水线配置}。为gralloc后端添加bo_create_with_modifiers实现接口，
-
-% \begin{table}[h]
-%     \centering
-%     \caption{颜色缓冲区流水线配置}
-%     \label{tab:颜色缓冲区流水线配置}
-%     \begin{tabular}{lllp{3cm}}
-%       \toprule
-%       位域 & 名称 & 访问 & 描述 \\
-%       \midrule
-%       1:0 & tilem & RW & 0:线性格式 \newline
-%                         1: 4x4 的 Tile 格式 \newline
-%                         2: 8x8 的 Tile 格式\\
-%       \bottomrule
-%     \end{tabular}
-%     \note{}
-% \end{table}
-
 
 % \section{性能分析}
 
