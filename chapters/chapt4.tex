@@ -862,30 +862,30 @@ count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体
   \KwOut{out\_handle}
   \SetKwProg{Fn}{Function}{}{}
   \Fn{allocate(descriptor， out\_handle)}{
-      \tcp{格式解析与对象创建}
+      %\tcp{格式解析与对象创建}
       \If{get\_resolved\_format\_and\_use\_flags() 失败}{\Return $-EINVAL$}
-      \If{drv\_bo\_create() 失败}{\Return 错误码}
-      \tcp{句柄初始化}
+      \If{drv\_bo\_create() 失败}{\Return{错误码}}
+      %\tcp{句柄初始化}
       计算 num\_fds/num\_ints\;
       创建 hnd 并初始化 fds 为 -1\;
-      \tcp{平面数据填充}
+      %\tcp{平面数据填充}
       \For{每个平面}{
           填充 fd/stride/offset/size\;
           \If{失败}{Goto {destroy}}
       }
-      \tcp{保留区处理}
+      %\tcp{保留区处理}
       \If{需要保留区 \&\& create\_reserved\_region() 失败}{Goto {destroy}}
-      \tcp{元数据与全局管理}
+      %\tcp{元数据与全局管理}
       hnd.id $\leftarrow$ 原子递增\;
       填充其他元数据\;
       \If{创建 buffer 失败}{Goto {destroy}}
       加锁插入全局表\;
       *out\_handle $\leftarrow$ hnd\;
       \Return 0\;
-      \tcp{失败逻辑处理}
-      Destroy : 
+      %\tcp{失败逻辑处理}
+      Destroy :
           清理句柄/bo\;
-          \Return 错误码\;
+          \Return{错误码}\;
   }
   \end{algorithm}
 
@@ -993,13 +993,13 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 以区别不同项目的命名空间。
 
 \subsection{瓦片访存优化}
-LG110是Tile-Based架构的GPU，支持将几何数据转换成小矩形区域，目前已支持4✖4以及8x8的Tile格式,如表\ref{tab:颜色缓冲区流水线配置}。
-Tile-Based Rendering就是可以尽量减少片元着色期间的GPU的外部内存访问量，如图\ref{fig:不同GPU架构数据流向},Immediate架构在执行片元着色时会多次写入主存导致访存压力，
+LG110是Tile-Based架构的GPU，支持将几何数据转换成小矩形区域，目前已支持4x4以及8x8的Tile格式，如表\ref{tab:颜色缓冲区流水线配置}。
+Tile-Based Rendering可以尽量减少片元着色期间的GPU的外部内存访问量，如图\ref{fig:不同GPU架构数据流向}，Immediate架构在执行片元着色时会多次写入主存导致访存压力，
 而Tile-based架构的GPU会在tile内一次性光栅化所有的三角形。将片元结果缓存在片上Tile缓冲区，等Tile渲染完再写回主存。
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{不同GPU架构数据流向.pdf}
+  \includegraphics[width=1\textwidth]{不同GPU架构数据流向.pdf}
   \caption{不同GPU架构数据流向}
   \label{fig:不同GPU架构数据流向}
 \end{figure}
@@ -1020,7 +1020,7 @@ Tile-Based Rendering就是可以尽量减少片元着色期间的GPU的外部内
     \note{}
 \end{table}
 
-在安卓图形架构中，使用的是直接渲染框架，因此对Tile-based渲染需要用户态驱动Mesa共同完成支持即可。
+在安卓图形架构中，使用的是直接渲染框架，因此对Tile-based渲染仅需要用户态驱动Mesa完成支持即可。
 在进行纹理资源创建时选择GSGPU\_SURF\_MODE\_TILED4或GSGPU\_SURF\_MODE\_TILED8，如\ref{lst:tile-choosing}，除光标等特殊图层外，其余纹理均使用Tile模式提高访存效率。
 \lstset{
     language=C,

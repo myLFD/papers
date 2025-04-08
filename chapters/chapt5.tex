@@ -450,6 +450,15 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
   \label{fig:perf测试结果图2}
 \end{figure}
 
+使用glmark2的复杂纹理资源texture测试项model进行测试，多次测试单帧绘制时间，如图\ref{fig:tile优化性能数据}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.6\textwidth]{tile优化性能数据.png}
+  \caption{tile优化性能数据}
+  \label{fig:tile优化性能数据}
+\end{figure}
+
 % \section{系统优化}
 % lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
 % 影响图形运行效率的瓶颈是访存，因此使用缓存复用

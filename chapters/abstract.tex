@@ -22,7 +22,7 @@
   其中，图形缓存分配器采用缓冲区复用与零拷贝技术，优化缓冲区分配与映射效率；
   硬件混合渲染器则作为合成器，为上层 Android 应用提供帧合成与显示支持。
 
-  3.解决了龙芯平台 Android 系统的软件栈适配问题，增加 OpenGL ES 支持，并针对硬件特性定制了部分 Android 系统镜像，
+  3.解决了龙芯平台 Android 系统的软件栈适配问题，增加 OpenGL ES 支持以及访存优化，并针对硬件特性定制了部分 Android 系统镜像，
   成功打通系统显示通路，构建了完整的支持龙芯 GPU 的 Android 运行环境。
 
   为验证系统的正确性与可用性，本文基于 Android 官方测试集对各模块进行了功能性测试。
@@ -52,7 +52,7 @@ by kernel version variations.
 Memory Allocator (Gralloc). The graphics memory allocator adopts buffer reuse and zero-copy techniques to optimize buffer allocation 
 and mapping efficiency. The hardware composer serves as a compositor, providing frame composition and display support for upper-layer Android applications.
 
-3.Resolved software stack adaptation issues for the Android system on the Loongson platform, added support for OpenGL ES, 
+3.Resolved software stack adaptation issues for the Android system on the Loongson platform, added support for OpenGL ES and optimization for memory access, 
 and customized parts of the Android system image based on hardware characteristics. The system display pipeline was successfully established, 
 constructing a complete Android runtime environment with Loongson GPU support.
 
