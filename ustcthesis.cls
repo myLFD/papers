@@ -1926,8 +1926,7 @@
     {\fontsize{16bp}{31bp}\selectfont
       \begin{tabular}{@{}l@{\quad}l@{}}%
         \textsf{作者姓名：} & \ustc@author \\
-        \textsf{专业类别：} & \ustc@speciality \\
-        \textsf{专业领域：} & \ustc@professional@type \\
+        \textsf{类别领域：} & \ustc@speciality \\
         \ifx\ustc@practice@supervisor\@empty
           \textsf{导\hspace{2em}师：} & \ustc@supervisor@names \\
         \else
@@ -1981,7 +1980,6 @@
       \begin{tabular}{@{}l@{}}%
         Author:        \ustc@author@en \\
         Speciality:    \ustc@speciality@en \\
-        Major:    \ustc@professional@type@en \\
         \ustc@supervisor@en@line \\
         \ifx\ustc@practice@supervisor@en\@empty
         \else

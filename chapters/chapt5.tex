@@ -38,15 +38,15 @@
 
 \begin{figure}[h]
   \centering
-  \includegraphics[width=0.8\textwidth]{安卓命令行界面.png}
+  \includegraphics[width=1\textwidth]{安卓命令行界面.png}
   \caption{安卓命令行界面}
   \label{fig:安卓命令行界面}
 \end{figure}
 
 \subsection{程序调试}
-实机调试采用的是GDB工具加日志的方式。由于是实机环境，所以内核部分无法使用GDB，仅依靠日志输出完成调试。而在安卓环境下无法直接使用GDB调试某个程序或进程，所以采用测试机中后端加上位机前端的方式，
+实机调试采用的是GDB工具加日志的方式。程序调试结构如图\ref{fig:程序调试结构图}所示，由于是实机环境，所以内核部分无法使用GDB，仅依靠日志输出完成调试。而在安卓环境下无法直接使用GDB调试某个程序或进程，所以采用测试机中后端加上位机前端的方式，
 即在安卓镜像中编译可运行的GDB工具后端gdbserver，gdbserver可以直接运行调试某个程序或者直接链接某个以运行的进程并等待GDB前端的连接。上位机通过网络与安卓测试机连接，
-使用GDB工具设置测试机的IP和端口进行连接，并设置根文件目录、动态库搜索目录强制加载当前进程中的动态库文件的符号表，从而实现对某一程序或进程的测试。结构如图\ref{fig:程序调试结构图}
+使用GDB工具设置测试机的IP和端口进行连接，并设置根文件目录、动态库搜索目录强制加载当前进程中的动态库文件的符号表，从而实现对某一程序或进程的测试。
 
 \begin{figure}[h]
   \centering
@@ -63,7 +63,7 @@
 
 \subsection{内核驱动模块测试}
 由于是设备模块驱动的测试，需要通过内核的debugfs辅助测试，mount -t debugfs none debug挂载debug文件系统，对LG110的3个环形缓冲区进行测试，分别是
-ib、gfx、xdma，通过所有测试用例\ref{fig:内核驱动测试结果}
+ib、gfx、xdma，通过所有测试用例\ref{fig:内核驱动测试结果}。
 
 \begin{figure}[H]
     \centering
@@ -105,6 +105,40 @@ vm\_tests是虚拟内存ID测试集，测试了虚拟内存ID（VMID）预留机
     \end{tabular}
     \note{}
 \end{table}
+
+\subsection{合成引擎测试}
+\label{sec:合成引擎正确性测试}
+
+这里测试集使用的是SurfaceFlinger的CompositionEngine的测试集libcompositionengine\_test，该测试集主要用于测试CompositionEngine功能的正确性。
+由于CompositionEngine是混合渲染器的客户端，所以该测试集实际上也会对\textbf{硬件混合渲染器}的实现进行测试。该测试集共有71个测试套件482个测试用例，现对测试套件的
+测试功能做简单归纳。如表\ref{tab:libcompositionengine_test测试集}所示，可分为6个主要部分，显示设备管理、合成引擎测试、硬件合成器测试、输出层测试、
+渲染表面与空间映射和Planner策略模块测试，目前可以通过全部的测试用例。
+
+\begin{table}[H]
+    \centering
+    \caption{libcompositionengine\_test测试集}
+    \label{tab:libcompositionengine_test测试集}
+    \begin{tabular}{llll}
+      \toprule
+      类别 &  分类描述 & 数量 & 通过数量\\
+      \midrule
+      显示设备管理 & 硬件交互、颜色配置、基础显示配置 & 21 & 21\\
+      合成引擎测试 & 验证合成引擎提交、更新功能 & 4 & 4\\
+      硬件合成器测试 & HWC缓冲区测试 & 3 & 3\\
+      输出层测试 & 帧准备/提交、表面合成、光标等  & 33 & 33\\
+      渲染表面与空间映射 & 	离屏表面生命周期管理、坐标系变换算法 & 2 & 2\\
+      Planner策略模块测试 & 图层扁平化策略、纹理缓存预测模型、渲染成本优化 & 8 & 8\\
+      \bottomrule
+    \end{tabular}
+    \note{}
+\end{table}
+
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{libcomposer测试截图.png}
+%     \caption{libcomposer测试截图}
+%     \label{fig:libcomposer测试截图}
+% \end{figure}
 
 \subsection{图形缓存分配模块测试}
 gralloc功能测试采纳了两部分，一是谷歌官方提供的原生测试用例，是AOSP中framework（框架代码）提供的gralloc测试用例GrallocTypes\_test，
@@ -207,40 +241,6 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
     \end{tabular}
     \note{}
 \end{table}
-
-\subsection{合成引擎测试}
-\label{sec:合成引擎正确性测试}
-
-这里测试集使用的是SurfaceFlinger的CompositionEngine的测试集libcompositionengine\_test，该测试集主要用于测试CompositionEngine功能的正确性。
-由于CompositionEngine是混合渲染器的客户端，所以该测试集实际上也会\textbf{硬件混合渲染器}的实现进行测试。该测试集共有71个测试套件482个测试用例，现对测试套件的
-测试功能做简单归纳\ref{tab:libcompositionengine_test测试集}。可分为6个主要部分，显示设备管理、合成引擎测试、硬件合成器测试、输出层测试、
-渲染表面与空间映射和Planner策略模块测试，目前可以通过全部的测试用例。
-
-\begin{table}[H]
-    \centering
-    \caption{libcompositionengine\_test测试集}
-    \label{tab:libcompositionengine_test测试集}
-    \begin{tabular}{llll}
-      \toprule
-      类别 &  分类描述 & 数量 & 通过数量\\
-      \midrule
-      显示设备管理 & 硬件交互、颜色配置、基础显示配置 & 21 & 21\\
-      合成引擎测试 & 验证合成引擎提交、更新功能 & 4 & 4\\
-      硬件合成器测试 & HWC缓冲区测试 & 3 & 3\\
-      输出层测试 & 帧准备/提交、表面合成、光标等  & 33 & 33\\
-      渲染表面与空间映射 & 	离屏表面生命周期管理、坐标系变换算法 & 2 & 2\\
-      Planner策略模块测试 & 图层扁平化策略、纹理缓存预测模型、渲染成本优化 & 8 & 8\\
-      \bottomrule
-    \end{tabular}
-    \note{}
-\end{table}
-
-% \begin{figure}[h]
-%     \centering
-%     \includegraphics[width=0.8\textwidth]{libcomposer测试截图.png}
-%     \caption{libcomposer测试截图}
-%     \label{fig:libcomposer测试截图}
-% \end{figure}
 
 \subsection{渲染引擎测试}
 \label{sec:渲染引擎正确性测试}
@@ -433,7 +433,7 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
 
 进一步对GPU的帧渲染能力进行测试，使用AOSP原生测试用例gl2\_perf，提供了不同的着色器以及纹理场景，其中核心的数据包括Mpps（每秒可绘制的百万像素量），主要衡量GPU 填充像素的吞吐量，
 与分辨率、着色器复杂度相关；DC60是在满足60fps的前提下，每帧允许的绘制调用次数，衡量 CPU/GPU 提交绘制命令的效率。如图\ref{fig:perf测试结果图}和图\ref{fig:perf测试结果图2}。
-其中Solid color和Solid gradient由于是纯色填充，所以不需要对纹理进行采样，因此仅测试纹理类型2。纹理类型1的复杂度要高于纹理类型2,因此1的执行效率要低于2。由于硬件设计、工艺制造等
+其中Solid color和Solid gradient由于是纯色填充，所以不需要对纹理进行采样，因此仅测试纹理类型2。纹理类型1的复杂度要高于纹理类型2，因此1的执行效率要低于2。由于硬件设计、工艺制造等
 诸多方面的限制，目前仅可满足较基础的图形绘制任务。
 
 \begin{figure}[h]

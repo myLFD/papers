@@ -46,8 +46,8 @@ Soong 是 Android 构建系统的一部分，主要用于替代旧的 Makefile �
 而为了解决这些问题，Google 在 Android 8.0（Oreo）中引入了 Soong 作为新的构建系统。Soong 的设计旨在解决 Makefile 的诸多不足，并提供更好的性能和可维护性。
 基于 Blueprint 的构建：Soong 使用了一种名为 Blueprint 的配置语言，这种语言是针对 Android 特殊需求而设计的。Blueprint 使得定义模块及其依赖关系变得更加直观和灵活。
 其具有高性能、模块化和可扩展性和集成 Gradle等多种优势。Soong 通过并行化构建过程和智能依赖分析，显著提高了编译速度，使得开发者能更快地迭代。
-同时支持多种模块类型，包括 Java、C/C++ 和资源文件等，适应了 Android 多样化的构建需求。开发者可以通过编写新的 Blueprint 文件来扩展 Soong 的功能。
-Soong 还与 Gradle 集成，为 Android 应用的构建提供了更好的支持，使得 Android 应用开发更加灵活和便捷。结构如图\ref{fig:Soong结构示意图}
+同时支持多种模块类型，如图\ref{fig:Soong结构示意图}所示，包括 Java、gcc、clang、rust等，适应了 Android 多样化的构建需求。开发者可以通过编写新的 Blueprint 文件来扩展 Soong 的功能。
+Soong 还与 Gradle 集成，为 Android 应用的构建提供了更好的支持，使得 Android 应用开发更加灵活和便捷。
 
 \subsubsection{Bionic}
 
@@ -57,7 +57,7 @@ Bionic 是 Android 操作系统中的 C 标准库，实现了 POSIX 兼容的功
 
 Bionic 的开发始于 Android 项目的早期阶段，目的是为 Android 提供一个与 GNU C 库（glibc）兼容的替代品。随着 Android 的发展，Bionic 不断演进，
 以适应移动设备的需求。它的设计初衷是为了减少内存占用，提高启动速度，并提供对 Android 特有功能的支持。
-主要的特性有
+其主要的特性有：
 
 1.轻量级：Bionic 的核心设计理念是轻量化。它去除了许多传统 C 库中的功能，专注于满足 Android 应用的实际需求。这使得 Bionic 
 在资源受限的环境中表现出色。
@@ -93,7 +93,7 @@ AOSP源码树的核心包含以下几个部分：
 
   本文的工作集中在frameworks、device、external这几个目录下，以下几个是关键部分：
 
-  frameworks/native/services/surfaceflinger:Android中SurfaceFlinger服务所在的源码实现，集成了CompositionEngine(合成器的客户端),
+  frameworks/native/services/surfaceflinger:Android中SurfaceFlinger服务所在的源码实现，集成了CompositionEngine(合成器的客户端)，
   担任图形栈生产者消费者模型中消费端的角色，用于将上层的多个源数据进行合成并输送到显示器。
 
   frameworks/native/libs/renderengine:Android中渲染引擎实现，包含skia引擎和gl引擎，负责系统的图形生成，该引擎的在创建时会通过获取EGL句柄、创建绑定上下文等实现对显卡驱动的调用。
@@ -113,7 +113,7 @@ AOSP源码树的核心包含以下几个部分：
   device/loongson/loongsonboard/subdevs/graphics:龙芯设备图形栈的安装配置文件，对于所需安装的产品包、产品拷贝文件、以及板卡使用的编译宏等进行配置。
 
 \section{Android图形系统结构}\label{sec:Android图形系统结构}
-Android 的图形系统是为移动设备特别设计的，结构如图\ref{fig:安卓图形子系统架构图},包含了多个组件，如 SurfaceFlinger、Hardware Composer 
+Android 的图形系统是为移动设备特别设计的，结构如图\ref{fig:安卓图形子系统架构图}，包含了多个组件，如 SurfaceFlinger、Hardware Composer 
 和各种图形库（如 OpenGL ES 和 Vulkan）。其设计理念主要体现在以下几个方面：
 
 深度定制：Android 的图形协议针对移动设备的资源限制和性能要求进行了优化。它通过硬件加速和资源管理，
@@ -152,7 +152,7 @@ Hardware Composer 硬件抽象层通过查询机制，动态选择最优合成�
 
 \subsubsection{图形绘制表面与软件渲染接口}
 Surface 作为图形渲染的抽象画布，其实现依托于双缓冲队列的同步机制：Dequeued Buffer（应用当前写入到图形缓冲区）、Queued Buffer（等待合成的已完成缓冲区）。
-Canvas API 提供基于 Skia 引擎的软件光栅化能力，是 OpenGL ES 的低级替代方案。
+如图\ref{fig:Surface系统的任督二脉}所示，Canvas API 提供基于 Skia 引擎的软件光栅化能力，是 OpenGL ES 的低级替代方案。
 SurfaceHolder 通过回调接口实现 Surface 参数动态配置，其关键控制维度包括大小和格式等，为图形显示提供了灵活性。
 
 \begin{figure}[h]
@@ -196,7 +196,7 @@ TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView �
 
 所以，若需实现对龙芯硬件的支持，主要是在低级别组件上，需要实现Gralloc接口，负责图形缓冲区的分配与共享、支持不同格式的像素布局、与 GPU 显存的映射等。
 同时需要实现hwcomposer的接口，完成图层合成的硬件加速，显示时序控制等功能，并保证SurfaceFLinger能够正确调用HWC和Gralloc。
-在图形编程接口上，而由于现有的硬件实现仅有OpenGL和OpenGL ES,暂不对vulkan作支持，需要通过通过科纳斯标准 API暴露GPU 功能，确保SurfaceFlinger的渲染引擎 Skia后端支持龙芯GPU，
+在图形编程接口上，而由于现有的硬件实现仅有OpenGL和OpenGL ES，暂不对vulkan作支持，需要通过通过科纳斯标准 API暴露GPU 功能，确保SurfaceFlinger的渲染引擎 Skia后端支持龙芯GPU，
 这些具体支持实现将在后续章节中介绍。
 
 % \section{安卓图形编程接口}
@@ -215,10 +215,10 @@ TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView �
 % 它使用 GPU 来加速图形合成。
 
 \section{GPU软件栈}
-\subsection{核模块}
-核模块 是一种内核功能扩展机制，允许将某些功能以模块的形式动态加载到操作系统的内核中。它的设计目的是增强内核的灵活性和可扩展性，使得内核在不需要重新编译或重启的情况下能够扩展和更新。
+\subsection{内核模块}
+内核模块是一种内核功能扩展机制，允许将某些功能以模块的形式动态加载到操作系统的内核中。它的设计目的是增强内核的灵活性和可扩展性，使得内核在不需要重新编译或重启的情况下能够扩展和更新。
 模块通过特定的接口与内核进行交互，可以动态地扩展内核的功能，而无需重新启动系统。通过内核的模块化设计，可以根据需求加载、卸载、更新不同的功能模块。
-核模块的优点有：动态加载和卸载，模块不需要在系统启动时加载，而是在需要时按需加载，并可以在不需要时卸载，同时可以减少内存占用，增强了灵活性，不影响其他部分的功能。
+内核模块的优点有：动态加载和卸载，模块不需要在系统启动时加载，而是在需要时按需加载，并可以在不需要时卸载，同时可以减少内存占用，增强了灵活性，不影响其他部分的功能。
 
 没有模块的话，就必须得把所有实现新功能的函数都编译到内核，这种内核也叫单内核（monolithic kernels）。
 单内核是一种将所有内核功能编译为一个统一的内核映像的方式，其中包括设备驱动、文件系统、网络协议栈等所有内核组件。
@@ -229,10 +229,10 @@ TextureView 是一个结合了 View 和 SurfaceTexture 的组件。TextureView �
 文件系统模块允许内核支持不同类型的文件系统，如NTFS、ext4、FAT等。
 网络协议模块用于实现网络协议栈的一部分，支持不同的网络协议（如 TCP/IP、UDP 等）。
 内存管理模块用于管理系统的内存分配和回收。
-而安全和监控模块用于系统安全、身份验证、访问控制和资源监控的功能模块
+而安全和监控模块用于系统安全、身份验证、访问控制和资源监控的功能模块。
 
 \subsection{MESA}
-Mesa\cite{mesa}是由Brian Paul于1993年8月发起的一个开源图形API软件实现，提供了一整套图形库和驱动程序，允许开发者使用标准的图形 API（如OpenGL,OpenGL ES，Vulkan等）
+Mesa\cite{mesa}是由Brian Paul于1993年8月发起的一个开源图形API软件实现，提供了一整套图形库和驱动程序，允许开发者使用标准的图形 API（如OpenGL，OpenGL ES，Vulkan等）
 来进行图形渲染，而无需直接依赖硬件制造商的专有驱动程序，现由freedesktop维护并被广泛采用。
 由于其本身的设计初衷就是为了提供硬件无关的图形渲染能力，所以Mesa是一个跨平台跨操作系统的图形库，
 可以为多个硬件平台提供支持，包括intel、amd、Nvidia等驱动均在Mesa上有相关的开源实现，操作系统上支持Android、Linux、BSD 系统等。
@@ -241,7 +241,7 @@ Mesa\cite{mesa}是由Brian Paul于1993年8月发起的一个开源图形API软�
 \subsubsection{驱动框架}
 Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Gallium3D 框架），另一部分是新的Gallium驱动。
 经典的Mesa驱动是紧耦合的，这意味着要在现有驱动基础上实现一个其它的API规范几乎要重写这个驱动，而Gallium3D实现一套暴露现代GPU的硬件功能的API，将依赖潜在操作系统的部分分隔开来，
-使得可以支持各种操作系统。如图\ref{fig:mesa驱动结构图}。在经典结构中，应用程序（APP）通过 DRI驱动程序与图形硬件进行交互，DRI 驱动程序直接管理硬件，并通过 DRM与与显示硬件进行通信。
+使得可以支持各种操作系统。Mesa驱动结构如图\ref{fig:mesa驱动结构图}所示，在经典结构中，应用程序（APP）通过 DRI驱动程序与图形硬件进行交互，DRI 驱动程序直接管理硬件，并通过 DRM与与显示硬件进行通信。
 而在Gallium 3D 结构中，有State Tracker是Mesa核心和Gallium3D的接口，负责将MESA状态（混合模式，纹理状态等）和绘制命令（例如Gldrawarrays和gldrawpixels）转换为管道对象和操作
 而HW driver是GPU硬件的驱动，负责将上层的状态、纹理等翻译成GPU硬件可以识别的信息，而Winsys提供了与内核交互的接口，准确来说也是使用libdrm的接口，实现对操作系统的支持。
 
@@ -255,14 +255,14 @@ Mesa DRI驱动可以分为两部分，一部分是经典驱动（不基于Galliu
 OpenGL ES（Open Graphics Library for Embedded Systems）是一个为嵌入式系统设计的图形渲染接口，它为嵌入式设备提供了一个高效的图形渲染平台，
 使其能够以较低的功耗和硬件资源要求进行复杂的图形处理。
 OpenGL ES 是 OpenGL\cite{2005Interpretive}一个用于桌面图形渲染的开源标准）的子集，
-相比OpenGL,它删除了许多冗余函数并增加了一些定点算法\cite{yin2013research}。
+相比OpenGL，它删除了许多冗余函数并增加了一些定点算法\cite{yin2013research}。
 OpenGL ES 的目标是为设备提供一种跨平台的解决方案，允许开发者利用硬件加速的图形渲染，同时又不需要复杂的硬件支持。
-OpengGL ES版本从1.0到3.x处于不断发展过程中，其与OpengGL的发展不完全相同，但是作为OpenGL规范的子集，两者之间版本有着大致的对应关系。
+如图\ref{fig:OpengGL ES版本演进}所示，OpengGL ES版本从1.0到3.x处于不断发展过程中，其与OpengGL的发展不完全相同，但是作为OpenGL规范的子集，两者之间版本有着大致的对应关系。
 
 1. OpengGL ES 1.0和 OpenGL ES 1.1分别从OpenGL 1.3和OpenGL 1.5规范衍生而来，两者功能十分接近，都基于固定功能管线，所以渲染过程是由OpenGL 和 OpenGL ES 的固定功能模块
 控制，而不需要开发者编写着色器程序。
 
-2.OpengGL ES 2.0基于OpenGL 2.0的规范，采用可编程渲染管线，去除了对1.0固定功能管线的支持，依赖开发者编写着色器程序来控制渲染管线。并且相比OpenGL 2.0,
+2.OpengGL ES 2.0基于OpenGL 2.0的规范，采用可编程渲染管线，去除了对1.0固定功能管线的支持，依赖开发者编写着色器程序来控制渲染管线。并且相比OpenGL 2.0，
 OpengGL ES 2.0去除了一些不常用的功能，专注于嵌入式设备的需求。
 
 3.OpenGL ES 3.0 是对 OpenGL 2.x 的一次重大提升，其在功能上继承了OpenGL 3.x 的一些特性，如基于着色器的可编程渲染管线、支持多个渲染目标（MRT）、帧缓冲对象（FBO）等，然而
@@ -297,7 +297,7 @@ DRM框架（Direct Rendering Manager） 是Linux内核中用于管理图形硬�
 \end{figure}
 
 KMS（Kernel Mode Setting） 内核显示模式设设置，是通过内核来设置和管理显示设备的模式（如分辨率、刷新率、颜色深度等）。
-KMS 允许操作系统直接控制显示硬件，减少了用户空间与显示设备之间的中间层，提供了更高效、更灵活的显示控制。显示控制过程如图\ref{fig:DRM显示控制}
+KMS 允许操作系统直接控制显示硬件，减少了用户空间与显示设备之间的中间层，提供了更高效、更灵活的显示控制。显示控制过程如图\ref{fig:DRM显示控制}所示。
 
 GEM（Graphics Execution Manager）是图形缓冲区管理模块，为操作系统和用户空间应用程序提供高效的显存管理功能，实现的功能有缓冲区分配、映射、销毁、交换等，
 

@@ -55,33 +55,33 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 \subsection{安卓兼容性分析}
 由于安卓是一个开源项目，因此任何硬件制造商都可以制造搭载安卓操作系统的设备，但兼容安卓的前提是可以正常运行安卓的执行环境和应用。
 根据Android12的兼容性文档\cite{Android12CDD}中有关2D和3D图形加速的部分，对于显卡和配套驱动作出如下约束，必须支持OpenGL ES 1.1和2.0，
-以及如下10种拓展\ref{tab:Android12兼容拓展要求}。目前龙芯LG110及配套已满足相关兼容性标准。
+以及如下10种拓展如表\ref{tab:Android12兼容拓展要求}所示。目前龙芯LG110及配套已满足相关兼容性标准。
 
 \begin{table}[h]
   \centering
   \caption{Android12兼容拓展要求}
   \label{tab:Android12兼容拓展要求}
-  \begin{tabular}{l}
+  \begin{tabular}{ll}
     \toprule
-    拓展名  \\
+    拓展名  & 用途\\
     \midrule
-    EGL\_KHR\_image \\
-    EGL\_KHR\_image\_base \\
-    EGL\_ANDROID\_image\_native\_buffer \\
-    EGL\_ANDROID\_get\_native\_client\_buffer \\
-    EGL\_KHR\_wait\_sync \\
-    EGL\_KHR\_get\_all\_proc\_addresses \\
-    EGL\_ANDROID\_presentation\_time \\
-    EGL\_KHR\_swap\_buffers\_with\_damage \\
-    EGL\_ANDROID\_recordable \\
-    EGL\_ANDROID\_GLES\_layers \\
+    EGL\_KHR\_image & 共享图像资源支持\\
+    EGL\_KHR\_image\_base & KHR核心函数定义\\
+    EGL\_ANDROID\_image\_native\_buffer & 用于图像共享\\
+    EGL\_ANDROID\_get\_native\_client\_buffer & 原生图像格式支持\\
+    EGL\_KHR\_wait\_sync & 同步图像或资源状态\\
+    EGL\_KHR\_get\_all\_proc\_addresses & 获取所有EGL扩展函数的地址\\
+    EGL\_ANDROID\_presentation\_time & 设置某一帧显示的理想时间戳\\
+    EGL\_KHR\_swap\_buffers\_with\_damage & 支持只更新屏幕上变化的区域\\
+    EGL\_ANDROID\_recordable & 标志一个配置是否支持将输出传给编码器\\
+    EGL\_ANDROID\_GLES\_layers & 允许对 GLES 图层进行扩展控制\\
     \bottomrule
   \end{tabular}
   \note{}
 \end{table}
 
 \section{图形系统整体设计}
-经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述。如图\ref{fig:图形栈总体结构图},其中AOSP系统服务（淡绿色标注部分）表示安卓系统服务部分，
+经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述，如图\ref{fig:图形栈总体结构图},其中AOSP系统服务（淡绿色标注部分）表示安卓系统服务部分，
 loongson硬件支持（紫色标注部分）表示现有的龙芯显卡实现相关的软件，需要部分适配，需实现部分（红色标注）表示需要实现的模块。
 
 \begin{figure}[h]

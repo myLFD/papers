@@ -33,7 +33,7 @@ args 是以unsigned long类型传递的，是用户空间传递的命令参数�
 
 cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
 
-在linux内核中还定义了几个辅助宏用于生成具体的命令码，如图\ref{lst:drm-ioctl}。
+在linux内核中还定义了几个辅助宏用于生成具体的命令码，如代码块\ref{lst:drm-ioctl}。
 
 \begin{table}[h]
   \centering
@@ -96,7 +96,6 @@ cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
   \centering
   \caption{IOCTL命令码表}
   \label{tab:IOCTL命令码表}
-  \resizebox{\linewidth}{!}{
   \begin{tabular}{llll}
     \toprule
     命令序号  ​	​ &​ 功能领域​	& 权限位 & 映射函数 \\
@@ -120,7 +119,7 @@ cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
     0x16		& ​硬件信号量操作​	& 0x100001 & gsgpu\_hw\_sema\_op\_ioctl\\
     \bottomrule
     \end{tabular}
-  }
+  
   \note{}
 \end{table}
 
@@ -210,15 +209,16 @@ DRM\_IOCTL\_ioctl实际上就是经过DRM\_COMMAND\_BASE基地址偏移的命令
 将命令表封装进drm\_device结构体的数据中，并在用户态程序进行ioctl系统调用时根据DRM命令码调用对应的内核函数func实现。
 DRM命令码与内核处理函数func的映射关系已在表\ref{tab:IOCTL命令码表}中展示。
 
+
 \begin{lstlisting}[caption={DRM驱动IOCTL定义宏}, label={lst:drm-ioctl-drv}, escapechar=@]
-  #define DRM_IOCTL_DEF_DRV(ioctl, func, _flags) \
-      {                                           \
-          .cmd    = DRM_IOCTL_NR(ioctl),          \
-          .func   = func,                         \
-          .flags  = _flags,                       \
-          .name   = #ioctl                        \
-      }
-  \end{lstlisting}
+#define DRM_IOCTL_DEF_DRV(ioctl, func, _flags) \
+  {                                           \
+    .cmd    = DRM_IOCTL_NR(ioctl),          \
+    .func   = func,                         \
+    .flags  = _flags,                       \
+    .name   = #ioctl                        \
+  }
+\end{lstlisting}
   
 % \begin{figure}[h]
 %   \centering
@@ -596,7 +596,7 @@ Android自身提供了共享内存的机制，native\_handle\_t是一个用于�
 满足相关支持。
 然后gralloc\_handle\_t图形缓冲区的创建如图\ref{fig:gralloc调用栈}所示，分为gralloc前端和后端，使用一个drv作为中间层（主要是Gralloc实现的一些辅助函数），具体实现会调用支持了
 gsgpu的后端库，该后端包含的缓冲区操作函数如\ref{tab:gralloc模块后端接口表}。Android系统上层应用程序在需要使用图形缓存时，使用路径1通过IPC跨进程通信向Gralloc守护进程申请图形缓存，
-然后allocator和mapper会通过路径（2-3）调用drv辅助函数，辅助函数相关实现通过路径4基于gsgpu\_backend实现，该后端会通过路径5基于gsgpu的DRI驱动或者直接通过路径6调用libdrm的IOCTL命令，
+然后allocator和mapper会通过路径（2-3）调用drv辅助函数，辅助函数相关实现通过路径4基于gsgpu\_backend实现，该后端会通过路径5基于gsgpu的DRI驱动或者直接通过路径7调用libdrm的IOCTL命令，
 gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通过路径8实现用户态程序和DRM内核的交互。
 
 \begin{table}[h]  
@@ -710,17 +710,15 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 在使用DRI框架进行缓冲区对象创建时，有使用修饰符和不使用修饰符两种方式。因此有3种创造缓冲区的的方式，创造linear线性缓冲区、使用修饰符创建tile缓冲区以及
 使用DRI驱动中的默认创建方式。因此在创建缓冲区时，如果元数据中的tile属性为真，表示创建的是tile格式的缓冲区，在此基础上可以通过判断是否是带有修饰符，
 如果带有修饰符，则使用DRI驱动框架中的createImageWithModifiers方法创建缓冲区。createImageWithModifiers 是一个用于创建支持特定内存布局修饰符的图像或缓冲区对象的函数。
-而所是元数据中不适用修饰符创建缓冲区则使用createImage创建缓冲区，作用与上一个函数类似。这两种方法在创建时都需要传入宽、高、格式（、修饰符），而格式需要从drm格式转换为dri\_image格式，
+而所是元数据中不适用修饰符创建缓冲区则使用createImage创建缓冲区，作用与上一个函数类似。这两种方法在创建时都需要传入宽、高、格式（修饰符），而格式需要从drm格式转换为dri\_image格式，
 在此不过多赘述。而第三种是创建线性缓冲区，需要先初始化缓冲区布局，为图形缓冲区对象计算和设置与格式相关的属性，如步幅（stride）、大小（size）、偏移量(offset)。
 步幅是指从缓冲区中某一行的开始位置到下一行开始位置的字节数。换句话说，它是缓冲区内每行数据的跨度，它告诉我们如何从当前行跳到下一行。
 偏移量是指从缓冲区的起始位置到某个数据元素的内存地址的距离。大小表示缓冲区所占用的内存空间的大小，通常以字节为单位。
-内存分配参数选择GTT内存域，并执行GSGPU\_GEM\_CREATE内核调用，创建GTT内存。如图\ref{fig:lgbm后端-3-1}。
+内存分配参数选择GTT内存域，并执行GSGPU\_GEM\_CREATE内核调用，创建GTT内存，如图\ref{fig:lgbm后端-3-1}。
 
 缓冲区销毁bo\_destroy是将显卡虚拟空间中的缓冲区对象销毁，将需要销毁的缓冲区对象句柄调用GEM\_CLOSE即可。
 缓冲区释放bo\_release是将用户态中的资源释放，但不清除内核态的资源，调用DRI驱动destroyImage方法实现。
-
 步长计算公式：
-
 \begin{equation}
   stride=((width+h\_subsampling-1)/h\_subsampling)*b\_p\_pixel
 \end{equation}
@@ -758,7 +756,7 @@ createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性
 但是如果GTT缓冲区标志为写入合并（CPU\_GTT\_USWC），是将多个小写入合并为更大的突发传输，属于CPU优化写入的实现方式。在XDMA引擎正常的情况下，再次申请GTT内存并将
 源缓冲区数据写入目标缓冲区。随后使用GSGPU\_GEM\_MMAP获取该GTT缓冲区对象的内核地址，通过mmap将内核地址映射到用户空间，返回用户可访问的虚拟地址。
 若任一环节失败则关闭临时创建的 GEM 对象，释放相关内存。
-流程如图\ref{fig:lgbm后端-4-1}
+流程如图\ref{fig:lgbm后端-4-1}。
 
 \begin{figure}[h]
   \centering
@@ -768,7 +766,7 @@ createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性
 \end{figure} 
 
 解除缓冲区映射需要先使用munmap系统调用解除用户空间虚拟地址的映射，随后需要根据映射是否需要写回的标志位，判断是否需要将数据从GTT内存写回源缓冲区对象，若是则需要调用XDMA
-将修改后的数据写回，写完后使用GEM\_CLOSE关闭临时的GEM对象（即GTT内存的缓冲区对象），如图\ref{fig:lgbm后端-4-2}
+将修改后的数据写回，写完后使用GEM\_CLOSE关闭临时的GEM对象（即GTT内存的缓冲区对象），如图\ref{fig:lgbm后端-4-2}。
 
 \begin{figure}[h]
   \centering
@@ -784,9 +782,10 @@ createImageFromDmaBufs2完成，主要是为了支持一些压缩纹理等特性
 
 \subsection{功能实现模块}
 %缓冲区同步，缓冲区复用
-
+从安卓系统服务跨进程调用缓冲区相关实现，具体来说就是使用系统的handle句柄，向Gralloc服务申请相关的缓冲区。而安卓系统服务往往会申请多个缓冲区
+或同时对同一个缓冲区进行多次申请，因此实现缓冲区快速申请是必经之路。因此设计如图\ref{fig:handle-buffer存储哈希表}，
 本地存储缓冲区和句柄的结构是两个哈希表，一个用于对gralloc\_handle\_t和gralloc\_imported\_handle\_info进行哈希映射，
-info包含缓冲区和该句柄引用该缓冲区的数量，用于支持对已注册缓冲区句柄的多次访问支持。另一个对句柄id和缓冲区进行哈希映射以实现快速访问。
+info包含缓冲区和该句柄引用该缓冲区的数量，用于支持对已注册缓冲区句柄的多次访问支持。另一个对缓冲区id和缓冲区进行哈希映射以实现快速访问。
 
 \begin{figure}[h]
   \centering
@@ -851,7 +850,7 @@ count是指需要分配的缓冲区数量，数据类型为uint32\_t。在具体
 回滚已分配的所有handle以保证数据的一致性，主要是使用native\_handle\_close和native\_handle\_delete请除当前句柄的资源，并获取已分配至handles向量中的
 所有句柄进行清空缓冲区的操作。若创建成功，则继续初始化元数据Metadata的信息，这个主要是为一些优化方法提供支持。
 如果都创建成功则使用handle的setTo方法将创建成功的handle句柄添加至handles向量作为分配缓冲区成功的结果。
-而驱动的allocate的算法设计如\ref{algo:GRALLOC_DRIVER::ALLOCATE}，主要是使用上一节所述的支持龙芯的Gralloc后端方法完成缓冲区的创建，获取宽、高、格式、步长、压缩标志等信息用于
+而驱动的allocate的算法设计如算法\ref{algo:GRALLOC_DRIVER::ALLOCATE}，主要是使用上一节所述的支持龙芯的Gralloc后端方法完成缓冲区的创建，获取宽、高、格式、步长、压缩标志等信息用于
 初始化handle句柄并创建gralloc\_buffer等。
 
 \begin{algorithm}
@@ -995,7 +994,7 @@ libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastruct
 \subsection{瓦片访存优化}
 LG110是Tile-Based架构的GPU，支持将几何数据转换成小矩形区域，目前已支持4x4以及8x8的Tile格式，如表\ref{tab:颜色缓冲区流水线配置}。
 Tile-Based Rendering可以尽量减少片元着色期间的GPU的外部内存访问量，如图\ref{fig:不同GPU架构数据流向}，Immediate架构在执行片元着色时会多次写入主存导致访存压力，
-而Tile-based架构的GPU会在tile内一次性光栅化所有的三角形。将片元结果缓存在片上Tile缓冲区，等Tile渲染完再写回主存。
+而Tile-based架构的GPU会在tile内一次性光栅化所有的三角形，将片元结果缓存在片上Tile缓冲区，等Tile渲染完再写回主存。
 
 \begin{figure}[h]
   \centering

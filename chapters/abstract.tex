@@ -11,14 +11,15 @@
 \begin{abstract}
   随着信息技术的范式变革，移动端图形处理需求呈现指数级增长。Android作为占据全球市场份额76\%的移动操作系统，
   其图形子系统的性能与兼容性已成为影响用户体验的关键要素。其中，GPU驱动作为协调性能与稳定性的核心组件，
-  直接决定着图形渲染管线的效能边界。然而在Android商业化生态中，主流GPU厂商的技术壁垒导致硬件规格文档与驱动源码获取异常困难，
-  这严重制约了基于自主架构的图形系统研究。针对这一现状，龙芯GPU在LoongArch指令集架构下对Android S系统的完整适配，
-  具有研究价值和应用意义。本文基于LoongArch架构与龙芯显卡，围绕 Android 图形系统进行了以下工作:
+  直接决定着图形系统的运行效能。然而在Android商业化环境中，主流GPU厂商为保有竞争力多选择生态闭源导致硬件规格文档与驱动源码获取困难，
+  这严重制约了基于自主架构的图形系统研究。针对这一现状，本文基于LoongArch架构与龙芯显卡，围绕 Android 图形系统进行了以下工作:
   
-  1.设计并实现了显卡驱动内核模块，设计了 DRM 内核模块与用户态之间的交互命令码，实现了从用户空间提交 GPU 命令到 GPU 处理器的高效传输。
-  并为适配不同的内核版本，本课题基于内核模块接口的变化特性，设计了一种多版本适配方案，弥补了驱动因为内核版本变动而导致的差异。
+  1.分析设计安卓图形系统整体结构。本文从关键服务、架构差异以及安卓兼容性三个方面对安卓图形栈系统进行分析，将图形系统分为
+  loongson硬件支持、AOSP系统服务以及需要实现的模块三个部分，具体为图形缓存分配模块和硬件混合渲染模块，并对两个模块进行需求分析。
 
-  2.基于龙芯硬件接口，实现了 Android 关键依赖模块——硬件混合渲染器（HWC）和图形缓存分配器（Gralloc）。
+  2.设计并实现了显卡驱动内核模块，设计了 DRM 内核模块与用户态之间的交互命令码，实现了从用户空间提交 GPU 命令到 GPU 处理器的高效传输。
+  并为适配不同的内核版本，本课题基于内核模块接口的变化特性，设计了一种多版本适配方案，弥补了驱动因为内核版本变动而导致的差异。
+  基于龙芯硬件接口，实现了 Android 关键依赖模块——硬件混合渲染器（HWC）和图形缓存分配器（Gralloc）。
   其中，图形缓存分配器采用缓冲区复用与零拷贝技术，优化缓冲区分配与映射效率；
   硬件混合渲染器则作为合成器，为上层 Android 应用提供帧合成与显示支持。
 
@@ -32,23 +33,28 @@
 \end{abstract}
 
 \begin{abstract*}
-  With the paradigm shift in information technology, the demand for mobile graphics processing has seen exponential growth. 
-  As Android holds a 76\% share of the global mobile operating system market, the performance and compatibility of its graphics 
-  subsystem have become key factors influencing user experience. Among them, the GPU driver, as a core component balancing performance and stability, 
-  directly determines the efficiency boundaries of the graphics rendering pipeline. However, in the commercial Android ecosystem, 
-  the technological barriers imposed by mainstream GPU vendors make it extremely difficult to access hardware specifications and driver source code, 
-  which severely restricts research on graphics systems based on independent architectures.
+With the paradigm shift in information technology, the demand for mobile graphics processing has been growing exponentially. 
+As the mobile operating system with a 76\% global market share, Android’s graphics subsystem performance and compatibility 
+have become critical factors affecting user experience. Among its components, the GPU driver serves as a core element that 
+balances performance and stability, directly determining the efficiency of the graphics system. However, in the commercial 
+Android ecosystem, mainstream GPU vendors often adopt closed-source strategies to maintain competitiveness, 
+making it difficult to obtain hardware specifications and driver source code. This poses a significant challenge to 
+research on graphics systems based on independent architectures.
 
 In response to this situation, the complete adaptation of Android S to the Loongson GPU under the LoongArch instruction 
 set architecture holds significant research value and practical relevance. Based on the LoongArch architecture and Loongson GPU, 
 this thesis carries out the following work centered around the Android graphics system:
 
-1.Designed and implemented a GPU driver kernel module, including the design of command codes for interaction between the DRM kernel module and user space, 
+1.Analyze and design the overall structure of the Android graphics system. This thesis analyzes the Android graphics stack from three aspects: 
+key services, architectural differences, and Android compatibility. The graphics system is divided into three parts: Loongson hardware support, 
+AOSP system services, and modules that need to be implemented—specifically, the graphics buffer allocation module and the hardware composition and 
+rendering module. A requirements analysis is conducted for these two modules.
+
+2.Designed and implemented a GPU driver kernel module, including the design of command codes for interaction between the DRM kernel module and user space, 
 achieving efficient transmission of GPU commands from user space to the GPU processor. To support different kernel versions, 
 this work proposes a multi-version adaptation scheme based on changes in kernel module interfaces, addressing discrepancies caused 
 by kernel version variations.
-
-2.Implemented key Android-dependent modules based on Loongson hardware interfaces—namely the Hardware Composer (HWC) and the Graphics 
+Implemented key Android-dependent modules based on Loongson hardware interfaces—namely the Hardware Composer (HWC) and the Graphics 
 Memory Allocator (Gralloc). The graphics memory allocator adopts buffer reuse and zero-copy techniques to optimize buffer allocation 
 and mapping efficiency. The hardware composer serves as a compositor, providing frame composition and display support for upper-layer Android applications.
 
