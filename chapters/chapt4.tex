@@ -1,9 +1,8 @@
 % !TeX root = ../main.tex
 
-\chapter{龙芯安卓图形栈详细设计与实现}
+\chapter{龙芯安卓图形栈关键模块实现}
 本章将详细介绍在现有龙芯硬件平台下，图形系统的三个重要组成部分：内核图形驱动模块，安卓Gralloc模块和硬件混合渲染（HWC）模块。内核驱动模块负责对接用户态驱动
 和GPU固件之间的联系。而Gralloc模块是根据龙芯硬件驱动向安卓上层libui库提供服务，硬件混合渲染(HWC)模块为安卓中进行窗口（Layer）合成和显示的HAL模块。
-随后说明了如何构建龙芯显卡的OpenGL ES支持以及定制部分安卓系统镜像。
 
 \section{GPU驱动内核模块的实现}
 现代操作系统对硬件资源的管理存在两种典型的设计模式\cite{马超2015linux}：
@@ -11,7 +10,7 @@
 2.抽象隔离模式​（如 Linux）：内核通过硬件抽象层（HAL）屏蔽物理设备细节，所有硬件操作必须通过标准化的系统调用\cite{刘大同2016vxworks}（如 open()， ioctl()）发起，内核负责资源调度和安全审查。
 驱动程序就是操作系统内核和硬件沟通的桥梁，准确来说就是内核的一部分。
 
-\subsection{IOCTL命令码设计}
+\subsection{IOCTL命令码实现}
 \label{sec:IOCTL命令码设计}
 在内核驱动程序中，除了基本的设备读写操作（即读取和写入数据）外，设备驱动程序还需要支持对设备执行各种控制操作。
 这些控制操作通常是通过 ioctl（Input/Output Control）机制来实现的，它提供了一种用户空间和内核空间之间进行特定设备操作交互的方式。
@@ -62,7 +61,7 @@ cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
     numberstyle=\tiny\color{gray}
 }
 
-\begin{lstlisting}[caption={DRM IOCTL宏定义}, label={lst:drm-ioctl}]
+\begin{lstlisting}[label={lst:drm-ioctl}]
 #define DRM_IOCTL_BASE    'd'
 #define DRM_IO(nr)        _IO(DRM_IOCTL_BASE, nr)
 #define DRM_IOR(nr, type) _IOR(DRM_IOCTL_BASE, nr, type)
@@ -204,13 +203,13 @@ cmd = (direction << 30) | (magic << 24) | (number << 16) | (size \& 0xFFFF)
 其中ioctl对应某个命令码，以DRM\_GSGPU\_GEM\_CREATE为例，ioctl=GSGPU\_GEM\_CREATE，structIoctl表示该命令码对应的数据大小，
 DRM\_IOCTL\_ioctl实际上就是经过DRM\_COMMAND\_BASE基地址偏移的命令码。
 每个命令码都对应具体的函数实现，通过DRM系统提供的DRM\_IOCTL\_DEF\_DRV宏完成联系。
-这个宏的作用是将驱动私有的 IOCTL 命令注册到 DRM 的统一命令表中，并关联对应的处理函数和权限标志。如图\ref{lst:drm-ioctl-drv}。
+这个宏的作用是将驱动私有的 IOCTL 命令注册到 DRM 的统一命令表中，并关联对应的处理函数和权限标志。如代码块\ref{lst:drm-ioctl-drv}。
 这里实际上将DRM命令、处理该命令的内核函数指针、权限标志和命令的字符串名称分别存入cmd、func、flags和name域，在内核模块进行PCI设备注册时，
 将命令表封装进drm\_device结构体的数据中，并在用户态程序进行ioctl系统调用时根据DRM命令码调用对应的内核函数func实现。
 DRM命令码与内核处理函数func的映射关系已在表\ref{tab:IOCTL命令码表}中展示。
 
 
-\begin{lstlisting}[caption={DRM驱动IOCTL定义宏}, label={lst:drm-ioctl-drv}, escapechar=@]
+\begin{lstlisting}[label={lst:drm-ioctl-drv}, escapechar=@]
 #define DRM_IOCTL_DEF_DRV(ioctl, func, _flags) \
   {                                           \
     .cmd    = DRM_IOCTL_NR(ioctl),          \
@@ -291,7 +290,7 @@ drmCommandWriteRead封装的args，以DRM\_IOC拆解传入的命令序号作为�
 %   \note{}
 % \end{table}
 
-\subsection{多版本适配方案设计}
+\subsection{多版本适配方案实现}
 龙芯gsgpu内核驱动属于闭源状态，尚未整合到已有的内核源码，采用的方案为驱动模块独立开发的方式，这样设计有多个方面的好处，
 
 一是为了适应多种方式加载驱动模块的需求，既可以通过加载/lib/modules/\$(kernel\_uname)下
@@ -698,7 +697,7 @@ gsgpu DRI驱动会通过路径6调用集成在libdrm的接口函数，libdrm通�
 \begin{figure}[h]
   \centering
   \includegraphics[width=1\textwidth]{lgbm后端-2.pdf}
-  \caption{XDMA内存搬运流程}
+  \caption{XDMA内存搬运流程图}
   \label{fig:lgbm后端-2}
 \end{figure}  
 
@@ -950,187 +949,15 @@ VINTF 文件中的信息会与设备上已安装的 HAL 实现进行对比以验
 是与内存分配器相关的接口，instance元素表示接口的实例名称是 default，通常 HAL 可以有多个实例，但这里指定的是默认实例。而Mapper仅在<transport>子项有所区别，由于Mapper实现的是
 直通式，所以是passthrough，且包含arch元素为32+64，表示该接口支持 32 位和 64 位架构。
 
-\section{OpenGL ES}
 
-\subsection{构建安卓OpenGL ES支持}
-
-龙芯现有的驱动实现基于Mesa的gallium架构。
-gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
-state tracker是状态跟踪器，负责将将高级图形API的调用转换为Gallium内部的具体的管道操作。
-而驱动层是直接与GPU硬件交互的部分，负责硬件指令生成，就是将Gallium的中间命令转换为GPU特定的指令集；着色器编译，将NIR中间表示编译为GPU原生代码，并进行优化；
-资源管理，分配显存、管理纹理和缓冲区对象；命令提交，构建命令缓冲区，并通过winsys提交到硬件队列等。这是硬件特性的最直接体现，它和state tracker组成了
-gallium架构下实现OpenGL ES功能的核心组件。而winsys层主要包括显存管理、命令提交与同步、显示输出管理和操作系统平台适配上。
-因此在安卓上OpenGL ES实现复用驱动层的实现即可。因此本节仅描述如何构建OpenGL ES支持，并简述目标动态安装库。
-
-龙芯Mesa的版本为18.3.6，而由于现有的安卓版本为12.0.0，安卓API版本为31对应的Mesa版本为20.3.4，并且由于安卓新的编译方式Soong的加入，
-Mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用框架外编译的方式。为考虑后续版本的兼容性，因此在现有的Mesa18.3.6上采用
-Mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。使用安卓框架外编译去生成动态库文件，即用cross-compile配置Mesa交叉编译脚本aosp-cross，再使用原生ninja编译规则生成目标安装目录install，
-将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯Mesa版本提供支持。
-
-Mesa编译框架如图\ref{fig:mesa编译框架}，AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的Mesa交叉编译规则，
-按照Mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=0.8\textwidth]{mesa编译框架.pdf}
-  \caption{Mesa编译框架}
-  \label{fig:mesa编译框架}
-\end{figure}
-
-而Mesa的目标动态库数据结果如下：
-
-libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
-
-libGLESv1\_CM.so.1.1.0，是一个用于实现 OpenGL ES 1.x（特别是 OpenGL ES 1.1 和 OpenGL ES 1.0）功能的共享库），负责将 OpenGL ES 1.x 请求转换为 GPU 可执行的指令；
-
-libGLESv2.so.2.0.0，是一个提供 OpenGL ES 2.x 功能的共享库，用于支持 OpenGL ES 2.x（及以上版本）的图形渲染，提供了着色器的支持等；
-
-libglapi.so.0.0.0，提供 OpenGL API 调用 的代理功能，使得 OpenGL 函数调用可以通过动态链接的方式，调用不同的 OpenGL 实现库；
-
-libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastructure (DRI) 驱动程序实现。
-
-上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务调用。而在安卓的命名空间习惯中，由于驱动来源不止mesa项目一种，所以需要将libEGL.so重命名为libGLES\_mesa.so，
-以区别不同项目的命名空间。
-
-\subsection{瓦片访存优化}
-LG110是Tile-Based架构的GPU，支持将几何数据转换成小矩形区域，目前已支持4x4以及8x8的Tile格式，如表\ref{tab:颜色缓冲区流水线配置}。
-Tile-Based Rendering可以尽量减少片元着色期间的GPU的外部内存访问量，如图\ref{fig:不同GPU架构数据流向}，Immediate架构在执行片元着色时会多次写入主存导致访存压力，
-而Tile-based架构的GPU会在tile内一次性光栅化所有的三角形，将片元结果缓存在片上Tile缓冲区，等Tile渲染完再写回主存。
-
-\begin{figure}[h]
-  \centering
-  \includegraphics[width=1\textwidth]{不同GPU架构数据流向.pdf}
-  \caption{不同GPU架构数据流向}
-  \label{fig:不同GPU架构数据流向}
-\end{figure}
-
-\begin{table}[h]
-    \centering
-    \caption{颜色缓冲区流水线配置}
-    \label{tab:颜色缓冲区流水线配置}
-    \begin{tabular}{lllp{3cm}}
-      \toprule
-      位域 & 名称 & 访问 & 描述 \\
-      \midrule
-      1:0 & tilem & RW & 0:线性格式 \newline
-                        1: 4x4 的 Tile 格式 \newline
-                        2: 8x8 的 Tile 格式\\
-      \bottomrule
-    \end{tabular}
-    \note{}
-\end{table}
-
-在安卓图形架构中，使用的是直接渲染框架，因此对Tile-based渲染仅需要用户态驱动Mesa完成支持即可。
-在进行纹理资源创建时选择GSGPU\_SURF\_MODE\_TILED4或GSGPU\_SURF\_MODE\_TILED8，如\ref{lst:tile-choosing}，除光标等特殊图层外，其余纹理均使用Tile模式提高访存效率。
-\lstset{
-    language=C,
-    basicstyle=\ttfamily\small,
-    keywordstyle=\color{blue},
-    commentstyle=\color{green!50!black},
-    stringstyle=\color{red},
-    showstringspaces=false,
-    breaklines=true,
-    frame=single,
-    numbers=left,
-    numberstyle=\tiny\color{gray}
-}
-
-\begin{lstlisting}[caption={tile模式选择}, label={lst:tile-choosing}]
-...
-if(templ->bind & PIPE_BIND_CURSOR)
-  return GSGPU_SURF_MODE_LINEAR;
-...
-return GSGPU_SURF_MODE_TILED4;
-\end{lstlisting}
-
-\section{安卓系统镜像定制}
-由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit， MMU）采用页式管理来处理 GPU 所使用的内存，
-所有内部功能模块均使用虚拟地址。在连接到内部网络之前，这些地址需要经过转换。当前，MMU 设计了三级页表结构，且页大小（page size）为 16KB。
-然而，Android 12 尚未支持 16KB 的页大小。这意味着需要对以下几个方面进行修改：
-
-\textbf{Bionic 库}:需要在 Bionic 中调整页面数据结构，以支持 16KB 的页大小。
-
-\textbf{安卓通用内核文件系统}：在内核的文件系统（如ext4、super和f2fs）中添加对 16KB 页大小的支持。
-
-\textbf{AOSP部分系统服务}：在 AOSP 中的部分系统服务中也需添加相应的支持。
-
-具体实现方法是使用内联函数 page\_size() 来获取内核中的页大小，从而实现对多种页面大小的兼容。这种改动将确保龙芯显卡的 MMU 
-能够高效地与 Android 系统和应用程序进行集成，提供更好的性能和兼容性。
-
-% \subsection{内核编译\&bionic\&部分系统服务修改说明}
-
-\subsection{内核定制}
-本课题所使用的内核是安卓通用内核5.10，因此在编译时需要添加安卓特性相关的驱动支持如ASHMEM、BINDERFS、BINDERIPC等。
-考虑到需要实现对龙芯显卡的支持，在内核编译时需要将loonggpu/lg100\_cp.bin通过CONFIG\_EXTRA\_FIRMWARE选项指定并使用CONFIG\_EXTRA\_FIRMWARE\_DIR指定固件所在的
-位置。由于LG110硬件设计上的限制，因此虚拟内存管理只能使用三级页表，页表大小为16Kb。而安卓由于历史原因大部分服务都是基于页面大小为4Kb这一条件开发的，而
-页面大小的调整会提供更快的启动速度以及节省能源等\cite{lpc2023_16k}。现需要将内核部分模块做硬件适应性修改，如f2fs模块等，
-详见表\ref{tab:f2fs模块修改说明}。以此为基础，对f2fs模块中所有依赖这几个宏的相关实现进行修改。
-
-\begin{table}[h]
-  \centering
-  \caption{f2fs模块修改说明}
-  \label{tab:f2fs模块修改说明}
-  \begin{tabular}{lll}
-    \toprule
-    宏名   &   原有  &改动  \\
-    \midrule
-    F2FS\_MAX\_LOG\_SECTOR\_SIZE & 12 & PAGE\_SHIFT \\
-    F2FS\_LOG\_SECTORS\_PER\_BLOCK & 3 & PAGE\_SHIFT - 9 \\
-    F2FS\_BLKSIZE & 4096 & PAGE\_SIZE \\
-    F2FS\_BLKSIZE\_BITS & 12 & PAGE\_SHIFT \\
-    \bottomrule
-  \end{tabular}
-  \note{}
-\end{table}
-
-\subsection{根文件系统定制}
-安卓文件系统需要定制的部分可分为bionic和部分系统服务。这两个部分的适配的动机与内核类似，
-具体实现可以在bionic/libc/platform/bionic/page.h中实现一个内联page\_size()的函数用以实现从内核
-中动态获取页表大小，并以此为适配有使用PAGE\_SIZE为4k相关的服务。这个函数实现是用getauxval来获取与进程相关的辅助值（auxiliary vector values），而
-辅助向量是内核传递给程序的额外信息，通常是在程序启动时传递给它的，用于提供关于系统环境的各种信息。AT\_PAGESZ就是辅助向量常量之一，用于查询系统的页面大小，如算法\ref{algo:获取内核页面大小}
-同时，由于Android12中有大量的系统服务依然在使用PAGE\_SIZE宏，因此对相关系统服务做一些适应性修改在所难免，共计完成40余处的修改。
-\begin{algorithm}
-  \SetAlgoLined
-  \KwData{void}
-  \KwResult{size\_t}
-  inline size\_t page\_size(){\\
-  \eIf{PAGE\_SIZE已定义}{
-    return PAGE\_SIZE\;
-  }{
-    size = getauxval(AT\_PAGESZ)\\
-    return size\;
-  }
-  }
-  \caption{获取内核页面大小}
-  \label{algo:获取内核页面大小}
-\end{algorithm}
-
-% \begin{figure}
-%   \centering
-%   \includegraphics[width=1\textwidth]{androidS+16k适配改动图.pdf}
-%   \caption{龙芯androidS 16k适配改动图}
-%   \label{fig:androidS 16k适配改动图}
-% \end{figure}
 
 \section{本章小结}
 本章介绍基于龙芯显卡的安卓图形栈的详细设计和具体实现。说明了三个主要的模块实现：
 龙芯GPU内核模块的实现，设计了DRM的ioctl命令码，以及为了适应内核的多版本需求所实现的一套内核驱动模块多版本适配方案；
 硬件混合渲染模块简要介绍主要模块功能和具体实现；图形缓存分配模块从硬件支持模块、功能实现模块以及HIDL接口设计与实现这三个部分说明基于LG110的安卓图形缓冲管理HAL层是如何实现的。
-然后是说明在安卓上构建OpenGL ES支持的方案，安卓系统镜像定制的方案，以及安卓系统定制镜像方面的设计。
 
-% 字段名	对应的函数	功能描述
-% name	"gsgpu_common"	模块的名称，通常用于标识该模块或打印调试信息。
-% early_init	gsgpu_common_early_init	早期初始化函数，模块初始化前需要做的一些准备工作。
-% late_init	gsgpu_common_late_init	后期初始化函数，在其他初始化完成后执行的工作。
-% sw_init	gsgpu_common_sw_init	软件部分的初始化函数，通常用于分配内存、初始化数据结构等。
-% sw_fini	gsgpu_common_sw_fini	软件部分的清理函数，用于释放资源、销毁数据结构。
-% hw_init	gsgpu_common_hw_init	硬件部分的初始化函数，负责配置硬件寄存器或启动硬件功能。
-% hw_fini	gsgpu_common_hw_fini	硬件部分的清理函数，负责关闭硬件功能或恢复硬件状态。
-% suspend	gsgpu_common_suspend	挂起函数，通常在系统进入睡眠模式（如 S3）时调用，用于保存硬件状态。
-% resume	gsgpu_common_resume	恢复函数，通常在系统从睡眠模式恢复时调用，用于恢复硬件状态。
-% is_idle	gsgpu_common_is_idle	判断模块是否处于空闲状态的函数，通常用于调试或节能管理。
-% wait_for_idle	gsgpu_common_wait_for_idle	等待模块进入空闲状态的函数，通常用于保证操作完成后再进行后续操作。
-% soft_reset	gsgpu_common_soft_reset	软复位函数，用于在某些情况下重置模块，而无需对整个系统进行硬复位。
-% \subsection{gralloc}
+
+
 
 
 

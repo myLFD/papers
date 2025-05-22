@@ -1,9 +1,166 @@
 % !TeX root = ../main.tex
 
 % \chapter{性能分析与优化（安全性与稳定性分析）}
-\chapter{系统测试}
+\chapter{系统构建与测试}
 
-\section{测试平台}
+\section{系统构建与优化}
+
+\subsection{构建安卓OpenGL ES支持}
+
+龙芯现有的驱动实现基于Mesa的gallium架构。
+gallium结构可以分为state tracker层，驱动层以及面向操作系统的Winsys层。
+state tracker是状态跟踪器，负责将将高级图形API的调用转换为Gallium内部的具体的管道操作。
+而驱动层是直接与GPU硬件交互的部分，负责硬件指令生成，就是将Gallium的中间命令转换为GPU特定的指令集；着色器编译，将NIR中间表示编译为GPU原生代码，并进行优化；
+资源管理，分配显存、管理纹理和缓冲区对象；命令提交，构建命令缓冲区，并通过winsys提交到硬件队列等。这是硬件特性的最直接体现，它和state tracker组成了
+gallium架构下实现OpenGL ES功能的核心组件。而winsys层主要包括显存管理、命令提交与同步、显示输出管理和操作系统平台适配上。
+因此在安卓上OpenGL ES实现复用驱动层的实现即可。因此本节仅描述如何构建OpenGL ES支持，并简述目标动态安装库。
+
+龙芯Mesa的版本为18.3.6，而由于现有的安卓版本为12.0.0，安卓API版本为31对应的Mesa版本为20.3.4，并且由于安卓新的编译方式Soong的加入，
+Mesa目前最新的版本已经废弃了传统的mk编译方式，转而采用框架外编译的方式。为考虑后续版本的兼容性，因此在现有的Mesa18.3.6上采用
+Mesa原生的ninja编译方式，将生成的动态库文件添加到安卓目标生成目录中。使用安卓框架外编译去生成动态库文件，即用cross-compile配置Mesa交叉编译脚本aosp-cross，再使用原生ninja编译规则生成目标安装目录install，
+将生成的目标文件安装到AOSP编译框架指定的vendor分区，为后续龙芯Mesa版本提供支持。
+
+Mesa编译框架如图\ref{fig:mesa编译框架}，AOSP编译框架会自动监测所有的Android.mk并编译，Android.mk会调用mesa3d\_cross.mk生成aosp\_cross的Mesa交叉编译规则，
+按照Mesa原生的编译规则生成安装目录install，再将目标动态库文件安装到指定的vendor分区。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{mesa编译框架.pdf}
+  \caption{Mesa编译框架}
+  \label{fig:mesa编译框架}
+\end{figure}
+
+而Mesa的目标动态库数据结果如下：
+
+libEGL.so.1.0.0，是一个用于处理 EGL (Embedded-System Graphics Library) 接口的共享库，为 OpenGL ES 或 OpenVG 提供了对底层图形设备的抽象；
+
+libGLESv1\_CM.so.1.1.0，是一个用于实现 OpenGL ES 1.x（特别是 OpenGL ES 1.1 和 OpenGL ES 1.0）功能的共享库），负责将 OpenGL ES 1.x 请求转换为 GPU 可执行的指令；
+
+libGLESv2.so.2.0.0，是一个提供 OpenGL ES 2.x 功能的共享库，用于支持 OpenGL ES 2.x（及以上版本）的图形渲染，提供了着色器的支持等；
+
+libglapi.so.0.0.0，提供 OpenGL API 调用 的代理功能，使得 OpenGL 函数调用可以通过动态链接的方式，调用不同的 OpenGL 实现库；
+
+libgallium\_dri.so，提供了 Gallium 框架下的 Direct Rendering Infrastructure (DRI) 驱动程序实现。
+
+上述数个动态库文件，会被安装到对应的供应商（vendor）分区，以供系统服务调用。而在安卓的命名空间习惯中，由于驱动来源不止mesa项目一种，所以需要将libEGL.so重命名为libGLES\_mesa.so，
+以区别不同项目的命名空间。
+
+\subsection{安卓系统镜像定制}
+由于龙芯显卡 LG110 的存储管理单元（Memory Management Unit， MMU）采用页式管理来处理 GPU 所使用的内存，
+所有内部功能模块均使用虚拟地址。在连接到内部网络之前，这些地址需要经过转换。当前，MMU 设计了三级页表结构，且页大小（page size）为 16KB。
+然而，Android 12 尚未支持 16KB 的页大小。这意味着需要对以下几个方面进行修改：
+
+\textbf{Bionic 库}:需要在 Bionic 中调整页面数据结构，以支持 16KB 的页大小。
+
+\textbf{安卓通用内核文件系统}：在内核的文件系统（如ext4、super和f2fs）中添加对 16KB 页大小的支持。
+
+\textbf{AOSP部分系统服务}：在 AOSP 中的部分系统服务中也需添加相应的支持。
+
+具体实现方法是使用内联函数 page\_size() 来获取内核中的页大小，从而实现对多种页面大小的兼容。这种改动将确保龙芯显卡的 MMU 
+能够高效地与 Android 系统和应用程序进行集成，提供更好的性能和兼容性。
+
+% \subsection{内核编译\&bionic\&部分系统服务修改说明}
+
+\subsubsection{内核定制}
+本课题所使用的内核是安卓通用内核5.10，因此在编译时需要添加安卓特性相关的驱动支持如ASHMEM、BINDERFS、BINDERIPC等。
+考虑到需要实现对龙芯显卡的支持，在内核编译时需要将loonggpu/lg100\_cp.bin通过CONFIG\_EXTRA\_FIRMWARE选项指定并使用CONFIG\_EXTRA\_FIRMWARE\_DIR指定固件所在的
+位置。由于LG110硬件设计上的限制，因此虚拟内存管理只能使用三级页表，页表大小为16Kb。而安卓由于历史原因大部分服务都是基于页面大小为4Kb这一条件开发的，而
+页面大小的调整会提供更快的启动速度以及节省能源等\cite{lpc2023_16k}。现需要将内核部分模块做硬件适应性修改，如f2fs模块等，
+详见表\ref{tab:f2fs模块修改说明}。以此为基础，对f2fs模块中所有依赖这几个宏的相关实现进行修改。
+
+\begin{table}[h]
+  \centering
+  \caption{f2fs模块修改说明}
+  \label{tab:f2fs模块修改说明}
+  \begin{tabular}{lll}
+    \toprule
+    宏名   &   原有  &改动  \\
+    \midrule
+    F2FS\_MAX\_LOG\_SECTOR\_SIZE & 12 & PAGE\_SHIFT \\
+    F2FS\_LOG\_SECTORS\_PER\_BLOCK & 3 & PAGE\_SHIFT - 9 \\
+    F2FS\_BLKSIZE & 4096 & PAGE\_SIZE \\
+    F2FS\_BLKSIZE\_BITS & 12 & PAGE\_SHIFT \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\subsubsection{根文件系统定制}
+安卓文件系统需要定制的部分可分为bionic和部分系统服务。这两个部分的适配的动机与内核类似，
+具体实现可以在bionic/libc/platform/bionic/page.h中实现一个内联page\_size()的函数用以实现从内核
+中动态获取页表大小，并以此为适配有使用PAGE\_SIZE为4k相关的服务。这个函数实现是用getauxval来获取与进程相关的辅助值（auxiliary vector values），而
+辅助向量是内核传递给程序的额外信息，通常是在程序启动时传递给它的，用于提供关于系统环境的各种信息。AT\_PAGESZ就是辅助向量常量之一，用于查询系统的页面大小，如算法\ref{algo:获取内核页面大小}
+同时，由于Android12中有大量的系统服务依然在使用PAGE\_SIZE宏，因此对相关系统服务做一些适应性修改在所难免，共计完成40余处的修改。
+\begin{algorithm}
+  \SetAlgoLined
+  \KwData{void}
+  \KwResult{size\_t}
+  inline size\_t page\_size(){\\
+  \eIf{PAGE\_SIZE已定义}{
+    return PAGE\_SIZE\;
+  }{
+    size = getauxval(AT\_PAGESZ)\\
+    return size\;
+  }
+  }
+  \caption{获取内核页面大小}
+  \label{algo:获取内核页面大小}
+\end{algorithm}
+
+\subsection{瓦片访存优化}
+LG110是Tile-Based架构的GPU，支持将几何数据转换成小矩形区域，目前已支持4x4以及8x8的Tile格式，如表\ref{tab:颜色缓冲区流水线配置}。
+Tile-Based Rendering可以尽量减少片元着色期间的GPU的外部内存访问量，如图\ref{fig:不同GPU架构数据流向}，Immediate架构在执行片元着色时会多次写入主存导致访存压力，
+而Tile-based架构的GPU会在tile内一次性光栅化所有的三角形，将片元结果缓存在片上Tile缓冲区，等Tile渲染完再写回主存。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=1\textwidth]{不同GPU架构数据流向.pdf}
+  \caption{不同GPU架构数据流向}
+  \label{fig:不同GPU架构数据流向}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \caption{颜色缓冲区流水线配置}
+    \label{tab:颜色缓冲区流水线配置}
+    \begin{tabular}{lllp{3cm}}
+      \toprule
+      位域 & 名称 & 访问 & 描述 \\
+      \midrule
+      1:0 & tilem & RW & 0:线性格式 \newline
+                        1: 4x4 的 Tile 格式 \newline
+                        2: 8x8 的 Tile 格式\\
+      \bottomrule
+    \end{tabular}
+    \note{}
+\end{table}
+
+在安卓图形架构中，使用的是直接渲染框架，因此对Tile-based渲染仅需要用户态驱动Mesa完成支持即可。
+在进行纹理资源创建时选择GSGPU\_SURF\_MODE\_TILED4或GSGPU\_SURF\_MODE\_TILED8，如代码块\ref{lst:tile-choosing}，除光标等特殊图层外，其余纹理均使用Tile模式提高访存效率。
+\lstset{
+    language=C,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray}
+}
+
+\begin{lstlisting}[label={lst:tile-choosing}]
+...
+if(templ->bind & PIPE_BIND_CURSOR)
+  return GSGPU_SURF_MODE_LINEAR;
+...
+return GSGPU_SURF_MODE_TILED4;
+\end{lstlisting}
+
+
+\section{测试环境与测试流程}
+
+\subsection{测试环境}
 由于AOSP仅源码就有130G之多，在完成编译之后达到212G，因此构建Android镜像需要一台性能充足构建机以及用于烧录运行镜像的测试机。
 构建机需要充足的存储空间以及编译大量内容，所以选择核数多性能强的服务器，测试机是目标系统镜像的运行平台。
 
@@ -19,10 +176,8 @@
 
     核模块构建：构建与内核编译类似，设置交叉编译环境后使用make即可编译。
 
-\textbf{测试机}：运行主机是LoongArch64结构，使用龙芯的3A5000CPU，配备7A2000桥片。桥片上集成了LG110显卡，该显卡所使用的固件需要在Android内核构建时以被编入，而内核驱动在安卓系统进入shell时
+\textbf{测试机}：运行主机使用龙芯的3A5000CPU，配备7A2000桥片。桥片上集成了LG110显卡，该显卡所使用的固件需要在Android内核构建时以被编入，而内核驱动在安卓系统进入shell时
     通过insmod（/rmmod）加载（或删除）该模块。
-
-\section{测试过程}
 
 \subsection{测试流程}
 测试流程如图\ref{fig:实机测试流程}。由于目前没有模拟7A2000的模拟器，所以本课题测试及调试均在实机环境下完成。
@@ -55,13 +210,13 @@
   \label{fig:程序调试结构图}
 \end{figure}
 
-\section{测试内容}
+\section{关键模块正确性验证}
 本节将从5部分对图形栈方案进行测试，内核驱动测试用于验证安卓内核以及驱动内核模块的正确性。
 图形缓存分配模块测试用于验证该模块的正确性。由于硬件混合渲染模块为SurfaceFlinger的合成器引擎提供服务端功能，因此使用合成引擎测试用例对
 硬件混合渲染模块的正确性进行测试。渲染引擎测试用于对构建的OpenGL ES实现和LG110 DRI驱动进行测试。
 本课题的关键服务进程是SurfaceFlinger，因此在最后一节对SurfaceFlinger进行测试以完成对SurfaceFlinger进行支持这一既定目标。
 
-\subsection{内核驱动模块测试}
+\subsection{GPU内核驱动模块测试}
 由于是设备模块驱动的测试，需要通过内核的debugfs辅助测试，mount -t debugfs none debug挂载debug文件系统，对LG110的3个环形缓冲区进行测试，分别是
 ib、gfx、xdma，通过所有测试用例\ref{fig:内核驱动测试结果}。
 
@@ -106,7 +261,28 @@ vm\_tests是虚拟内存ID测试集，测试了虚拟内存ID（VMID）预留机
     \note{}
 \end{table}
 
-\subsection{合成引擎测试}
+设计一组测试集，用于测试内核驱动稳定性，用例和结果如表\ref{tab:内核驱动稳定性测试}。安卓的Doze模型是Android 6.0引入的一种省电机制，
+旨在通过限制应用对网络和CPU的使用来延长设备的电池寿命。这里Doze模式的不同状态，如INACTIVE，是指屏幕关闭进入非活动状态。
+上述稳定性测试，表明内核驱动较为稳定，达到了设计预期。
+
+\begin{table}[H]
+  \centering
+  \caption{稳定性测试集及结果}
+  \label{tab:内核驱动稳定性测试}
+  \begin{tabular}{lll}
+    \toprule
+    测试项   &  测试方法  & 结果\\
+    \midrule
+    长时间连续运行渲染稳定性测试 & 驱动是否能在连续 72 小时图形负载下正常运行 & 通过\\
+    模块重复加载/卸载测试 & 驱动模块是否可反复加载/卸载且不崩溃或泄漏 & 通过\\
+    热插拔显示器测试 & 显示设备反复插拔是否引起驱动挂死或泄漏 & 通过\\
+    屏幕关闭 + Doze INACTIVE模式 & 测试部分硬件休眠能否唤醒 &通过\\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\subsection{硬件混合渲染模块测试}
 \label{sec:合成引擎正确性测试}
 
 这里测试集使用的是SurfaceFlinger的CompositionEngine的测试集libcompositionengine\_test，该测试集主要用于测试CompositionEngine功能的正确性。
@@ -242,6 +418,7 @@ gralloc0 是Android较早的图形内存管理接口，通常与较老的硬件�
     \note{}
 \end{table}
 
+\section{系统回归测试}
 \subsection{渲染引擎测试}
 \label{sec:渲染引擎正确性测试}
 
@@ -337,7 +514,7 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
     \label{tab:libsurfaceflinger_unittest测试分类}
     \begin{tabular}{lll}
         \toprule
-        测试类别 & 代表测试套件	& 描述 \\
+        测试类别 & 代表测试套件	& 描述 \\ 
         \midrule
         显示管理 & DisplayIdentificationTest & 验证显示设备的连接、断开、配置和状态管理 \\
         合成与渲染 & CompositionTest & HWC/RE合成路径验证 \\
@@ -403,6 +580,8 @@ SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成�
 
 
 \section{性能测试}
+
+\subsection{CPU端驱动开销}
 使用Native OpenGL ES程序测试，主要流程包括EGL环境初始化：创建原生窗口、EGL显示连接、创建渲染上下文等，
 OpenGL 资源初始化：窗口尺寸获取、纹理状态设置、生成测试纹理、投影矩阵配置等，在进行测试之前需要先进行预热，
 进行一定次数的渲染以排除硬件和缓冲区等影响。在主测试流程中，主要包括glclear清除颜色缓冲，glDrawArrays绘制基本图元，
@@ -410,7 +589,7 @@ eglSwapBuffers将EGL颜色缓冲区发布到窗口。经测试eglSwapBuffers占�
 安卓中的eglSwapBuffers的流程涉及应用层、图形驱动、系统服务及硬件的协同工作，包括应用层调用将当前渲染完成的帧提交给显示系统、
 EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提交硬件层处理。
 由于GPU端处理性能有所差异，因此使用零面积三角形类型的图元可以最小化硬件性能差异，主要反映了​图形API调用本身的CPU端开销和驱动层处理机制的效率，
-如图\ref{fig:零面积图元交换缓冲区时间}，本文实现的驱动层效率与AMD R5 520接近。
+如图\ref{fig:零面积图元交换缓冲区时间}，在相同的软件环境以及CPU、内存等硬件环境下，同时比较LG110与AMD R5 520，本文实现的LG110的驱动层效率略优于AMD R5 520。
 
 \begin{figure}[h]
     \centering
@@ -418,6 +597,8 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
     \caption{零面积图元交换缓冲区时间}
     \label{fig:零面积图元交换缓冲区时间}
 \end{figure}
+
+\subsection{缓冲区复用验证}
 
 使用AOSP中的原生测试用例gl2\_copyTexImage，分别测量帧渲染时间以及交换缓冲区时间。其中帧渲染阶段包括使用FBO（Framebuffer Object）进行离屏渲染，
 将FBO内容复制到纹理中并进行渲染。去除预热阶段帧准备不稳定的时间数据，取较为稳定的运行时间的10次作为实验结果，如图\ref{fig:copytex测试结果}。
@@ -430,6 +611,8 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
   \caption{copytex测试结果}
   \label{fig:copytex测试结果}
 \end{figure}
+
+\subsection{GPU渲染能力评估}
 
 进一步对GPU的帧渲染能力进行测试，使用AOSP原生测试用例gl2\_perf，提供了不同的着色器以及纹理场景，其中核心的数据包括Mpps（每秒可绘制的百万像素量），主要衡量GPU 填充像素的吞吐量，
 与分辨率、着色器复杂度相关；DC60是在满足60fps的前提下，每帧允许的绘制调用次数，衡量 CPU/GPU 提交绘制命令的效率。如图\ref{fig:perf测试结果图}和图\ref{fig:perf测试结果图2}。
@@ -450,6 +633,8 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
   \label{fig:perf测试结果图2}
 \end{figure}
 
+\subsection{tile优化测试}
+
 使用glmark2的复杂纹理资源texture测试项model进行测试，多次测试单帧绘制时间，Tile优化前后数据对比如图\ref{fig:tile优化性能数据}，
 性能提升约58\%。
 
@@ -460,25 +645,7 @@ EGL 与 BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提�
   \label{fig:tile优化性能数据}
 \end{figure}
 
-% \section{系统优化}
-% lgbm是支持龙芯显卡的安卓图形缓存分配器。为了进一步提高安卓图形系统的运行效率，本课题设计了优化算法对图形系统运行效率进行优化。
-% 影响图形运行效率的瓶颈是访存，因此使用缓存复用
-
-
-% \section{性能分析}
-
-% bocreate 缓冲重用
-% pb_cache_bucket = gsgpu_get_heap_index(domain， flags);
-
-% \section{启动时间优化}
-
-% \section{PAGE\_SIZE调整带来的影响评估}
-
-% \subsection{结论}
-
-% \section{？？？}
-
 \section{本章小结}
-本章对本文测试平台进行了全面的介绍，并详细介绍了测试过程以及调试方法。
-接着对所研究和构建的系统进行了从内核到整体的测试。简要介绍了整个测试过程，包括测试流程以及调试方法。在服务器上使用AOSP构建了完整的安卓内核、显卡核模块以及安卓系统镜像，在目标龙芯平台上
-安装了安卓系统，并进行了多项功能测试，并使用了龙芯以及谷歌官方提供的测试套件，从内核到系统服务等多个层面验证了系统的正确性。
+本章对系统构建以及测试做了全面的介绍。首先对系统的构建方法以及镜像定制做了完整的描述，在此基础上实现了Tile访存优化。
+随后介绍测试环境和流程，以及程序调试方法。接着对实现的三个关键模块进行正确性验证，使用龙芯以及谷歌官方提供的兼容性测试套件
+进行测试，同时进行了回归测试，结果证明系统达到预定的目标。最后进行了性能测试，图形系统的性能进行全面的评估。

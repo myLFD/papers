@@ -1,6 +1,6 @@
 % !TeX root = ../main.tex
 
-\chapter{龙芯安卓图形栈整体结构设计}
+\chapter{龙芯安卓图形系统分析与关键模块需求分析}
 在实现安卓图形栈之前，需要对图形栈的运行机制从多个关键服务以及架构差异进行分析，并整理需要实现的模块及功能。
 
 \section{图形栈系统分析}
@@ -28,7 +28,7 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 其作为硬件混合渲染器的客户端，会通过跨进程通信的方式调用框架中的Icomposer实现和接口，从而完成与具体硬件混合渲染器的交互。因此合成器引擎需要硬件混合渲染器实现的支持。
 而合成器在合成图像时需要向系统申请图形缓存，因此也需要图形内存缓存分配的实现。
 
-由上，为了实现对SurfaceFlinger的支持，需要实现OpengGL ES、完成硬件抽象层中的Gralloc和HWC服务。 
+由上，为了实现对SurfaceFlinger的支持，需要实现OpengGL ES对渲染引擎提供硬件支持，以及实现硬件抽象层中的Gralloc和HWC服务为合成器引擎提供硬件支持。 
 
 \subsection{架构差异分析}
 \label{sec:架构差异分析}
@@ -80,9 +80,9 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
   \note{}
 \end{table}
 
-\section{图形系统整体设计}
-经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述，如图\ref{fig:图形栈总体结构图},其中AOSP系统服务（淡绿色标注部分）表示安卓系统服务部分，
-loongson硬件支持（紫色标注部分）表示现有的龙芯显卡实现相关的软件，需要部分适配，需实现部分（红色标注）表示需要实现的模块。
+\section{图形系统整体结构概述}
+经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述，如图\ref{fig:图形栈总体结构图}，其中AOSP系统服务（淡绿色标注部分）表示安卓系统服务部分，
+loongson硬件支持（紫色标注部分）表示现有的龙芯显卡实现相关的软件，关键模块（红色标注）表示图形栈中关键模块HWC和gralloc。
 
 \begin{figure}[h]
   \centering
@@ -117,17 +117,78 @@ OpenGL ES的实现是由用户态驱动Mesa提供，而Mesa实现的OpenGL接口
 
 %在后续章节中，将从驱动内核模块、用户态驱动、Android HAL层实现以及系统镜像定制等4个部分说明方案。
 
-\section{系统需求分析}
+\section{关键模块需求分析}
 
 由上节关键服务分析可知，需要在安卓硬件抽象层实现Gralloc和HWC服务。安卓系统较为特殊，其本身对于模块的实现有着严格的接口定义和规范。
 自Android Q版本开始，为了提供图形性能和增强对硬件的支持，对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，
-具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2，本课题基于Gralloc4以及composer2.1实现。
+具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2，本课题基于Gralloc4以及composer2.1实现。同时，结合项目实际，
+内核驱动模块由于也需要部分重新实现，因此下将从三个模块，GPU内核驱动模块，图形缓存分配模块和硬件混合渲染模块进行需求分析。
+
+\subsection{GPU内核驱动模块需求分析}
+
+\subsubsection{功能需求}
+    
+    图形内存对象管理：支持处理上下文、命令流、内存映射、调用等核心功能。
+
+\subsubsection{非功能需求}
+
+    兼容性：支持Linux内核版本4.x/5.x/6.x，兼容libdrm/Mesa栈。
+
+    模块化加载与卸载支持：驱动应以内核模块形式构建（可通过 modprobe/rmmod 加载卸载），确保模块初始化和退出流程健壮，不发生内存泄露或设备资源未释放问题。
+
+    稳定性：长时间运行无内存泄漏、硬件挂起，可唤醒。
+
+\subsection{硬件混合渲染模块需求分析}
+
+WC模块的实现较为复杂，包含服务端和客户端，服务端的实现集中在/hardware/interfaces/graphics/composer下，
+服务端钟具体EGL的调用是由硬件供应商实现并通过私有调用回安卓合成系统用于最终的缓冲区显示\cite{baiget2019architecture}，
+客户端是指如SurfaceFlinger中的CompositionEngine通过跨进程调用服务端的实现。
+
+\subsubsection{功能需求}
+
+显示管道管理​:支持通过 libdrm 接口与内核 DRM 子系统交互，通过KMS（Kernel Mode Setting）设置分辨率、刷新率，支持热插拔检测与模式切换，支持原子更新，
+支持同时管理多个Connector，动态创建/销毁DRM显示管道实例。
+
+​图层混合与合成​:支持硬件混合与回退到 GPU 合成。支持基础图层（Primary）、叠加图层（Overlay）、光标（Cursor）等类型，
+需适配DRM Plane类型（DRM\_PLANE\_TYPE\_PRIMARY/OVERLAY/CURSOR），支持缩放、旋转、透明度混合、裁剪区域设置。
+
+​缓冲区管理​:基于Gralloc的缓冲区管理，将应用程序生成的图像资源统一转化为显示控制器可识别的标准化帧结构。
+
+\subsubsection{非功能需求}
+
+​兼容性​:适配主流 DRM 系统，支持龙芯LG系列GPU的显存管理，兼容 Android 10+的HIDL接口。
+
+稳定性与安全性:支持 DRM Master 丢失后重新初始化显示管道以实现异常恢复，单个Connector故障不影响其他显示输出
+
+\subsection{图形缓存分配模块需求分析}
+
+\subsubsection{功能需求}
+
+    ​GPU硬件兼容性​：支持GSGPU等LoongArch下GPU驱动。适配DRM/KMS接口，正确处理IOCTL命令。
+
+    ​缓冲区分配与管理​：支持常见像素格式及修饰符。实现显存与系统内存的自动选择策略，优先使用显存提升性能。
+
+    ​跨API共享​：通过DMA机制导出缓冲区句柄，支持跨进程间的零拷贝数据传输。提供缓冲区对象的导入/映射接口，兼容EGL/GLES纹理绑定流程。
+
+\subsubsection{性能优化}
+
+    ​内存复用​​：设计缓冲区缓存池，减少频繁分配/释放带来的内存碎片及性能开销，缓冲区复用的时间不超过0.3ms。
+
+    ​异步操作支持​：提供异步缓冲区映射接口，避免阻塞渲染线程。
+
+\subsubsection{非功能需求}
+        
+    兼容性:兼容Android 12，支持Kernel 5.10及DRM/KMS子系统。
+        
+    安全性:​确保不同进程的缓冲区访问权限隔离以实现内存隔离，缓冲区对象需通过引用计数自动释放以抗内存泄漏
+
+    可维护性：分离硬件后端与通用逻辑，便于新增GPU支持，集成Android Logcat，提供关键操作的调试日志。
+
+\subsubsection{接口需求}
+
 Gralloc模块需要完成内存分配、缓冲区映射、缓冲区管理、性能优化等多方面的功能，hwcomposer模块则需要实现图层管理、显示输出、合成控制、与Gralloc适应相关的功能。
 Gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/hardware/interfaces/graphics/mapper下，
 其中HAL接口表统计如表\ref{tab:gralloc模块HAL接口}。
-而HWC模块的实现较为复杂，包含服务端和客户端，服务端的实现集中在/hardware/interfaces/graphics/composer下，
-服务端钟具体EGL的调用是由硬件供应商实现并通过私有调用回安卓合成系统用于最终的缓冲区显示\cite{baiget2019architecture}，
-客户端是指如SurfaceFlinger中的CompositionEngine通过跨进程调用服务端的实现。
 
 \begin{table}[h]
   \centering
@@ -151,50 +212,8 @@ Gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/
   \note{}
 \end{table}
 
-\subsection{图形缓存分配模块需求分析}
-
-\subsubsection{功能需求}
-
-    ​GPU硬件兼容性​：支持GSGPU等LoongArch下GPU驱动。适配DRM/KMS接口，正确处理IOCTL命令。
-
-    ​缓冲区分配与管理​：支持常见像素格式及修饰符。实现显存与系统内存的自动选择策略，优先使用显存提升性能。
-
-    ​跨API共享​：通过DMA机制导出缓冲区句柄，支持跨进程间的零拷贝数据传输。提供缓冲区对象的导入/映射接口，兼容EGL/GLES纹理绑定流程。
-
-\subsubsection{性能优化}
-
-    ​内存复用​​：设计缓冲区缓存池，减少频繁分配/释放带来的内存碎片及性能开销。
-
-    ​异步操作支持​：提供异步缓冲区映射接口，避免阻塞渲染线程。
-
-\subsubsection{非功能需求}
-        
-    兼容性:兼容Android 12，支持Kernel 5.10及DRM/KMS子系统。
-        
-    安全性:​确保不同进程的缓冲区访问权限隔离以实现内存隔离，缓冲区对象需通过引用计数自动释放以抗内存泄漏
-
-    可维护性：分离硬件后端与通用逻辑，便于新增GPU支持，集成Android Logcat，提供关键操作的调试日志。
-
-\subsection{硬件混合渲染模块需求分析}
-
-\subsubsection{功能需求}
-
-显示管道管理​:支持通过 libdrm 接口与内核 DRM 子系统交互，通过KMS（Kernel Mode Setting）设置分辨率、刷新率，支持热插拔检测与模式切换，支持原子更新，
-支持同时管理多个Connector，动态创建/销毁DRM显示管道实例。
-
-​图层混合与合成​:支持硬件混合与回退到 GPU 合成。支持基础图层（Primary）、叠加图层（Overlay）、光标（Cursor）等类型，
-需适配DRM Plane类型（DRM\_PLANE\_TYPE\_PRIMARY/OVERLAY/CURSOR），支持缩放、旋转、透明度混合、裁剪区域设置。
-
-​缓冲区管理​:基于Gralloc的缓冲区管理，将应用程序生成的图像资源统一转化为显示控制器可识别的标准化帧结构。
-
-\subsubsection{非功能需求}
-
-​兼容性​:适配主流 DRM 系统，支持龙芯LG系列GPU的显存管理，兼容 Android 10+的HIDL接口。
-
-稳定性与安全性:支持 DRM Master 丢失后重新初始化显示管道以实现异常恢复，单个Connector故障不影响其他显示输出
-
 \section{本章小结}
 本章围绕着安卓图形栈的运行机制进行分析，
 从关键服务分析、架构差异分析以及安卓兼容性三个方面进行分析，总结图形系统方案，
-并对整体结构进行了描述。随后对于其中两个主要模块，图形缓存分配模块和硬件混合渲染模块进行需求分析。
+并对整体结构进行了概述。随后对于其中两个主要模块，图形缓存分配模块和硬件混合渲染模块进行需求分析。
 
