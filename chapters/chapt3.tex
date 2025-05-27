@@ -1,28 +1,30 @@
 % !TeX root = ../main.tex
 
-\chapter{龙芯安卓图形系统分析与关键模块需求分析}
-在实现安卓图形栈之前，需要对图形栈的运行机制从多个关键服务以及架构差异进行分析，并整理需要实现的模块及功能。
+\chapter{需求分析}
+本章节围绕安卓图形系统展开需求分析，从需求导出、功能性需求以及非功能性需求对系统进行分析。
 
-\section{图形栈系统分析}
+\section{需求导出}
 \subsection{SurfaceFlinger关键服务分析}
 Android图形系统作为移动端计算机的核心子系统，构建了从应用程序界面到物理显示设备的完整视觉呈现管道。
-这个复杂的系统包含超过50个核心组件，其中SurfaceFlinger作为系统级的合成引擎，承担着最核心的图形处理任务。
+这个复杂的系统包含超过50个核心组件，其中SurfaceFlinger作为系统级的合成引擎，承担着最核心的图形处理任务，保障其正确运行是图形系统运行的关键。
 整个系统的运作可以分解为三个层次架构：应用层、图形处理层和硬件抽象层。
 应用层负责通过UI框架构建图形界面元素，图形处理层包括渲染引擎和合成器引擎，硬件抽象层主要是为这两个引擎提供支持。
+本文的主要工作主要是硬件抽象层的实现。
+而渲染引擎和合成器引擎作为SurfaceFlinger服务的核心功能，分析这两个引擎的作用和依赖有助于引出硬件抽象层的需求，下面对这两个引擎进行简要分析。
 
 渲染引擎分析：渲染引擎是负责将抽象的图形描述转化为最终可视像素的软件系统。Android渲染引擎默认使用的是Skia，
 在SurfaceFlinger初始化过程中，会创建一个线程专门用于Skia引擎的初始化并用于后续的图形绘制，
 在SkiaGLRenderEngine::create时，会依次执行eglGetDisplay获取EGL显示句柄，此句柄代表了要渲染的物理设备；eglInitialize初始化EGL环境，并获得EGL的主次版本号；
 eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版本信息、供应商版本信息以及支持的客户端API等，安卓还会使用EGL\_EXTENSIONS
-获取有关安卓特性的拓展并初始化；使用createEglContext在EGL中创建 OpenGL ES 上下文；然后使用eglMakeCurrent将指定的渲染上下文和表面设置为当前的函数，
-流程如图\ref{fig:skia_create过程}。因此渲染引擎的正常运行需要OpenGL ES相关实现支持。
+获取有关安卓特性的拓展并初始化；使用createEglContext在EGL中创建 OpenGL ES 上下文；然后使用eglMakeCurrent将指定的渲染上下文和表面设置为当前的函数。
+因此渲染引擎的正常运行需要OpenGL ES相关实现支持。
 
-\begin{figure}
-  \centering
-  \includegraphics[width=1\textwidth]{skia\_create过程.pdf}
-  \caption{skia\_create过程}
-  \label{fig:skia_create过程}
-\end{figure}
+% \begin{figure}
+%   \centering
+%   \includegraphics[width=1\textwidth]{skia\_create过程.pdf}
+%   \caption{skia\_create过程}
+%   \label{fig:skia_create过程}
+% \end{figure}
 
 合成器引擎分析：SurfaceFlinger中集成了合成器引擎CompositionEngine，也是SurfaceFlinger的核心部分，负责将多个图层按照z轴顺序合成并渲染等。
 其作为硬件混合渲染器的客户端，会通过跨进程通信的方式调用框架中的Icomposer实现和接口，从而完成与具体硬件混合渲染器的交互。因此合成器引擎需要硬件混合渲染器实现的支持。
@@ -49,7 +51,7 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
 
 因此，首先需要解决的是在LoongArch架构下，Android系统中显存和系统内存分配映射的问题。AndroidX86\cite{AndroidX86}
 很大程度上解决这个问题，该项目使用Mesa作为OpenGL ES实现，基于DRM和GEM实现了Gralloc模块，成功的在x86架构下运行SurfaceFlinger并实现硬件加速\cite{XTYY201710015}。
-基于这个思路，我们也可以使用Mesa作为OpenGL ES实现以及Mesa提供的GBM（General Buffer Manager）来管理缓冲区，
+基于这个思路，本课题也可以采用Mesa作为OpenGL ES实现以及Mesa提供的GBM（General Buffer Manager）来管理缓冲区，
 为此需要LoongArch架构的DRM框架和用户态libdrm的支持。其中DRM框架需要基于安卓通用内核5.10实现。
 
 \subsection{安卓兼容性分析}
@@ -80,115 +82,417 @@ eglQueryString查询与当前显示连接相关的字符串信息，包括EGL版
   \note{}
 \end{table}
 
-\section{图形系统整体结构概述}
-经过上节需求分析，课题为系统设计了基于龙芯显卡LG110的安卓图形系统方案。本节将对系统整体做一个概述，如图\ref{fig:图形栈总体结构图}，其中AOSP系统服务（淡绿色标注部分）表示安卓系统服务部分，
-loongson硬件支持（紫色标注部分）表示现有的龙芯显卡实现相关的软件，关键模块（红色标注）表示图形栈中关键模块HWC和gralloc。
+\section{功能性需求}
 
-\begin{figure}[h]
+% 由上节关键服务分析可知，需要在安卓硬件抽象层实现Gralloc和HWC服务。安卓系统较为特殊，其本身对于模块的实现有着严格的接口定义和规范。
+% 自Android Q版本开始，为了提供图形性能和增强对硬件的支持，对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，
+% 具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2，本课题基于Gralloc4以及composer2.1实现。同时，结合项目实际，
+% 内核驱动模块由于也需要部分重新实现，因此下将从三个模块，GPU内核驱动模块，图形缓存分配模块和硬件混合渲染模块进行需求分析。
+
+\subsection{硬件混合渲染需求分析}
+\label{p:硬件混合渲染需求分析}
+
+HWC模块需要实现图层管理、显示输出、合成控制、与Gralloc适应相关的功能，包含服务端和客户端，服务端的实现集中在项目的{hardware/interfaces/graphics/composer}下，
+服务端中具体EGL的调用是由硬件供应商实现并通过私有调用回安卓合成系统用于最终的缓冲区显示\cite{baiget2019architecture}，
+客户端是指如SurfaceFlinger中的CompositionEngine通过跨进程调用服务端的实现。模块的基本功能包括显示资源管理、合成计划创建、验证与显示、缓冲区信息适配，以支持
+的用例图如图\ref{fig:硬件混合渲染用例图}所示。
+
+\begin{figure}
   \centering
-  \includegraphics[width=1\textwidth]{图形栈总体结构图.pdf}
-  \caption{图形栈总体结构图}    
-  \label{fig:图形栈总体结构图}
+  \includegraphics[width=0.8\textwidth]{硬件混合渲染用例图.pdf}
+  \caption{硬件混合渲染用例图}
+  \label{fig:硬件混合渲染用例图}
 \end{figure}
 
-自上往下分析，Android应用（Android Applications）、活动管理器（Activity Manager）、窗口管理器（Window Manager）以及部分安卓Native程序（如BootAnimation）
-等首先与Surface进行交互，根据自己的需求创建一个Surface，然后数个Surface会被SurfaceFlinger进行混合\cite{邓凡平2011深入理解}。
-因此图形系统中最关键的服务进程就是SurfaceFlinger，负责管理图形缓冲区的合成与显示，如图\ref{fig:图形栈总体结构图}所示，它将来自不同应用的图形缓冲区进行合成，
-并将合成结果发送到显示设备。SurafaceFlinger包含两个主要引擎合成引擎CompositionEngine和渲染引擎renderEngine，其中renderEngine在Android Q版本时被移至libs下作为相对独立的模块，
-但仍然是SurfaceFlinger功能重要组成部分。CompositionEngine是作为HWC的客户端通过IPC方式调用HAL中HWC实现，而renderEngine主要是skia渲染引擎，该引擎通过EGL和OpenGL ES实现
-3D硬件加速，需要HAL的Gralloc和显卡OpenGL ES实现的支持。因此，图形系统的正确运行一个重要的环节就是确保SurfaceFlinger的正确运行。
+\subsubsection{显示资源管理} 
 
-而由上文可知，SurfaceFlinger的运行依赖于硬件抽象层和底层图形库。这其中有两个重要的模块，一个是HWC（硬件混合渲染器），是进行窗口合成和显示HAL层模块，其实现是特定于设备的，
-通常是由显示设备制造商完成。其用于合成从Surfaceflinger接收的图层，从而减少GPU执行的合成量。
-另一个模块是Gralloc。它是Android中负责申请和释放GraphicBuffer的HAL层模块，
-由硬件驱动提供实现，为BufferQueue机制提供了基础。Gralloc的主要组件包括Allocator，Mapper。Allocator 负责内存的分配和释放，
-主要功能包括：根据请求的大小和格式分配内存缓冲区，负责跟踪已分配和空闲的内存块以及支持在多个进程之间共享缓冲区，使得不同的应用程序或组件能够访问同一块内存。
-Mapper负责将已分配的缓冲区映射到进程的虚拟地址空间。本课题需要实现支持龙芯硬件平台的Gralloc和HWC模块的库以支持SurfaceFlinger的正确运行，即\ref{fig:图形栈总体结构图}中
-需实现部分标注。
+硬件混合渲染模块需要与Linux DRM子系统交互，识别、组织并动态管理用于图像显示的硬件资源，包括CRTC、Plane、Connector和Encoder。
+这些资源是驱动屏幕显示的关键组件，硬件混合渲染用于配置和调度这些资源，确保每帧图像能够被正确输出到目标显示设备上。
+因此系统主要通过DRM管理模块完成对显示硬件资源的统一管理与初始化，用例描述如表\ref{tab:初始化DRM设备用例描述}。
+在初始化目标硬件资源之前，需要通过目标资源的属性对资源的状态进行判断，以及时的反馈给上层，用例描述如表\ref{tab:查找DRM对象指定属性用例描述}。
+模块需要对初始化后的DRM硬件资源与主平面进行绑定，用于对后续的合成进行支持，用例描述如表\ref{tab:构建绑定显示资源管线用例描述}。
+原子提交是为模块提供DRM原子提交支持，以确保每帧图像能够被正确输出到目标显示设备上，用例描述如表\ref{tab:原子提交用例描述}。
 
-龙芯显卡驱动栈的方案，采用了Mesa作为用户态驱动提供OpenGL ES实现和GBM加上DRM显示框架的方案。
-安卓的framework层以及库函数依赖的图形接口是由libdrm进行封装，包括上文提及的Gralloc和HWC都是需要使用libdrm定义的接口。
-libdrm是一个用户态空间的库，提供了与 Linux 内核中的 DRM子系统交互的接口。它是 Linux 图形栈的核心组件之一（同样也是Android图形栈的方案），
-通过封装 DRM 的 IOCTL 系统调用，为用户空间程序提供了简单易用的 API。
-至于内核部分仍然是依赖linux内核的KMS和DRM。DRM/KMS 是 Linux 内核中用于管理图形硬件的子系统，提供了对 GPU、显示控制器和显示设备的统一抽象。在上层的系统级服务中，
-SurfaceFlinger是通过HWC（Hardware Composer）与DRM/KMS交互，HWC负责将图形缓冲区合成任务委托给硬件。在 DRM/KMS 框架下，HWC 通过 DRM 接口与内核通信，
-管理显示模式设置、缓冲区分配和显示同步等任务。KMS 负责配置显示控制器和显示设备的分辨率、刷新率等参数，而 DRM 则管理图形缓冲区的分配与渲染。
-OpenGL ES的实现是由用户态驱动Mesa提供，而Mesa实现的OpenGL接口在已有的X图形协议上已有过相关测试。
+% 其实现的子功能包括：
 
-%在后续章节中，将从驱动内核模块、用户态驱动、Android HAL层实现以及系统镜像定制等4个部分说明方案。
+% 1.内核交互支持：基于 libdrm 提供对 DRM/KMS 子系统的封装，包括 drmModeGetResources、drmModeSetCrtc、drmModePageFlip 等调用。
+% 同时支持 DRM 原子操作接口（Atomic IOCTL）配置多个管道（CRTC + Connector + Plane）的一致性更新。
 
-\section{关键模块需求分析}
+% 2.显示模式管理：支持分辨率、刷新率、颜色深度等的获取与动态配置。实现 Display Hotplug 检测逻辑，自动响应外接屏幕HDMI连接状态变化。
+% 提供 Vsync 同步机制，支持同步与异步帧提交。
 
-由上节关键服务分析可知，需要在安卓硬件抽象层实现Gralloc和HWC服务。安卓系统较为特殊，其本身对于模块的实现有着严格的接口定义和规范。
-自Android Q版本开始，为了提供图形性能和增强对硬件的支持，对图形系统进行了重构与优化，至S版本稳定下来，中间迭代了4个API版本，
-具体表现为，引入了Gralloc2 API（至Android S版本Gralloc4稳定）和HWC2，本课题基于Gralloc4以及composer2.1实现。同时，结合项目实际，
-内核驱动模块由于也需要部分重新实现，因此下将从三个模块，GPU内核驱动模块，图形缓存分配模块和硬件混合渲染模块进行需求分析。
+% 3.多显示通道支持：同时支持多个物理显示输出（多个 Connector 和 CRTC 组合），支持主副屏独立更新。支持逻辑屏幕的热插拔、分离、镜像和扩展模式。
 
-\subsection{GPU内核驱动模块需求分析}
+\begin{table}[H]
+  \centering
+  \caption{初始化DRM设备用例描述}
+  \label{tab:初始化DRM设备用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 初始化DRM设备 \\
+    \midrule
+    用例描述 & 初始化DRM设备资源并建立显示资源映射 \\
+    执行者 & DRM管理模块 \\
+    前置条件 & 系统启动，/dev/dri/card* 存在，图形设备正常 \\
+    后置条件 & 完成资源的映射 \\
+    基本事件流 & \makecell[l]{1）打开DRM设备文件获取设备主控制权 \\2）获取DRM设备资源以及图层列表等 \\3）完成资源映射} \\
+    异常事件流 & 1）获取DRM设备资源失败 \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-\subsubsection{功能需求}
-    
-    图形内存对象管理：支持处理上下文、命令流、内存映射、调用等核心功能。
+\begin{table}[H]
+  \centering
+  \caption{查找DRM对象指定属性用例描述}
+  \label{tab:查找DRM对象指定属性用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 查找DRM对象指定属性 \\
+    \midrule
+    用例描述 & 查找并初始化DRM对象指定名称的属性 \\
+    执行者 & DRM管理模块 \\
+    前置条件 & 提供有效的DRM对象 ID、类型和目标属性名称 \\
+    后置条件 & 返回指定的DRM对象属性 \\
+    基本事件流 & \makecell[l]{1）遍历查找对象的指定属性\\2）释放资源} \\
+    异常事件流 & 1）获取指定属性为空 \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-\subsubsection{非功能需求}
+\begin{table}[H]
+  \centering
+  \caption{构建绑定显示资源管线用例描述}
+  \label{tab:构建绑定显示资源管线用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 构建绑定显示资源管线 \\
+    \midrule
+    用例描述 & 查找并初始化DRM对象指定名称的属性 \\
+    执行者 & DRM管理模块 \\
+    前置条件 & 已发现可用的 Connector、Encoder 和 CRTC \\
+    后置条件 & 返回绑定完成的管线 \\
+    基本事件流 & \makecell[l]{1）创建新的管线对象同时绑定连接器、编码器和控制器。\\2）遍历分类平面资源并验证绑定唯一主平面} \\
+    异常事件流 & 1）主平面数量为空或大于1无法绑定 \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-    兼容性：支持Linux内核版本4.x/5.x/6.x，兼容libdrm/Mesa栈。
+\begin{table}[H]
+  \centering
+  \caption{原子提交用例描述}
+  \label{tab:原子提交用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 原子提交 \\
+    \midrule
+    用例描述 & 创建DRM原子提交命令 \\
+    执行者 & DRM管理模块 \\
+    前置条件 & 上层模块有帧提交需求 \\
+    后置条件 & 返回内核执行结果 \\
+    基本事件流 & \makecell[l]{1）创建原子请求\\
+    2）设置每个图层的平面映射和属性并关闭未使用的平面\\
+    3）调用内核原子提交函数提交原子\\
+    4）请求若成功则更新当前帧状态及栅栏} \\
+    异常事件流 & 1）请求失败则返回错误日志  \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-    模块化加载与卸载支持：驱动应以内核模块形式构建（可通过 modprobe/rmmod 加载卸载），确保模块初始化和退出流程健壮，不发生内存泄露或设备资源未释放问题。
+% \begin{table}[H]
+%   \centering
+%   \caption{显示资源管理用例表}
+%   \label{tab:显示资源管理用例表}
+%   \begin{tabular}{p{3cm}p{3cm}p{3cm}p{3cm}}
+%     \toprule
+%     用例名称  & 参与者 & 前置条件 & 描述 \\
+%     \midrule
+%     初始化DRM设备资源并建立显示资源映射 & DRM管理模块 & 系统启动，/dev/dri/card* 存在，图形设备正常 & 打开DRM设备文件获取设备主控制权，
+%     获取DRM设备资源以及图层列表等，完成资源映射等。 \\
+%     查找并初始化DRM对象指定名称的属性 & DRM管理模块 & 提供有效的DRM对象 ID、类型和目标属性名称 & 遍历查找对象的指定属性并及时释放资源。\\
+%     构建绑定显示资源的管线 & DRM管理模块 & 已发现可用的 Connector、Encoder 和 CRTC & 创建新的管线对象同时需要尝试绑定连接器、编码器和控制器。
+%     随后绑定唯一主平面并返回管线对象。\\
+%     原子提交 & DRM管理模块 & 上层模块有帧提交需求 & 设置平面映射并调用内核原子提交函数提交原子请求。 \\
+    % 初始化DRM设备资源并建立显示资源映射 & DRM管理模块 & 系统启动，/dev/dri/card* 存在，图形设备正常 & 打开DRM设备文件获取设备主控制权，
+    % 获取DRM设备资源，并初始化每个CRTC、Encoder和Connector，必要资源属性并存储返回指针，随后获取图层列表，识别图层类型并初始化。 \\
+    % 查找并初始化DRM对象指定名称的属性 & DRM管理模块 & 提供有效的DRM对象 ID、类型和目标属性名称 & 获取对象的所有属性指针同时遍历属性ID获取每个属性详情，
+    % 判断属性名称是否匹配，随后及时释放资源。\\
+    % 构建绑定显示资源的管线 & DRM管理模块 & 已发现可用的 Connector、Encoder 和 CRTC & 创建新的管线对象同时需要尝试绑定连接器、编码器和控制器。
+    % 随后需要遍历分类平面资源并验证绑定唯一主平面，随后返回管线对象。\\
+    % 原子提交 & DRM管理模块 & 上层模块有帧提交需求 & 判断是否需要激活显示同时创建原子请求。设置每个图层的平面映射和属性并关闭未使用的平面。
+    % 调用内核原子提交函数提交原子请求若成功则更新当前帧状态及栅栏。 \\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
 
-    稳定性：长时间运行无内存泄漏、硬件挂起，可唤醒。
+\subsubsection{合成计划创建} 
 
-\subsection{硬件混合渲染模块需求分析}
+硬件混合渲染接收SurfaceFlinger提交的Layer组，尝试进行硬件合成。
+它直接决定了每一帧的图像最终是如何呈现在屏幕上的，涵盖了对图层属性的解析、合成路径的选择、混合参数的应用、以及如何控制硬件plane来完成目标合成。
+模块需要根据根据当前显示管线和上层传入的待渲染的图层列表创建一个绑定图层到硬件平面的渲染计划，用例描述如表\ref{tab:合成计划用例描述}所示。
 
-WC模块的实现较为复杂，包含服务端和客户端，服务端的实现集中在/hardware/interfaces/graphics/composer下，
-服务端钟具体EGL的调用是由硬件供应商实现并通过私有调用回安卓合成系统用于最终的缓冲区显示\cite{baiget2019architecture}，
-客户端是指如SurfaceFlinger中的CompositionEngine通过跨进程调用服务端的实现。
+% SurfaceFlinger会通过HWC2接口调用validateDisplay与presentDisplay，将图层信息传入模块。
 
-\subsubsection{功能需求}
+% 1.多图层排序与合成：系统需要解析每个图层的层级信息，并将其正确映射到支持不同层级的 DRM图层上，按照从底层到底层的顺序进行配置。
+% 实现 z-order 管理，保障图层优先级呈现正确。
 
-显示管道管理​:支持通过 libdrm 接口与内核 DRM 子系统交互，通过KMS（Kernel Mode Setting）设置分辨率、刷新率，支持热插拔检测与模式切换，支持原子更新，
-支持同时管理多个Connector，动态创建/销毁DRM显示管道实例。
+% 2.混合策略支持：优先使用硬件合成，不足时回退至GPU合成，同时支持缩放（scaling）、旋转（rotation， 90/180/270/flip）、透明度（alpha blending）和混合模式、裁剪（crop）等图层操作。
 
-​图层混合与合成​:支持硬件混合与回退到 GPU 合成。支持基础图层（Primary）、叠加图层（Overlay）、光标（Cursor）等类型，
-需适配DRM Plane类型（DRM\_PLANE\_TYPE\_PRIMARY/OVERLAY/CURSOR），支持缩放、旋转、透明度混合、裁剪区域设置。
+\begin{table}[H]
+  \centering
+  \caption{合成计划用例描述}
+  \label{tab:合成计划用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 合成计划 \\
+    \midrule
+    用例描述 & 创建帧图层到硬件平面的绑定计划 \\
+    执行者 & 合成器模块 \\
+    前置条件 & 已获取待显示的图层列表，管线中有可用平面资源 \\
+    后置条件 & 合成计划创建 \\
+    基本事件流 & \makecell[l]{ 1）从显示资源管线获取可用平面并选择一个支持的硬件平面。\\
+    2）所有图层匹配成功后返回完整的渲染计划}\\
+    异常事件流 & 1）无可用平面，立即返回空值  \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-​缓冲区管理​:基于Gralloc的缓冲区管理，将应用程序生成的图像资源统一转化为显示控制器可识别的标准化帧结构。
+% \begin{table}[H]
+%   \centering
+%   \caption{合成计划用例表}
+%   \label{tab:合成计划用例表}
+%   \begin{tabular}{p{3cm}p{3cm}p{3cm}p{3cm}}
+%     \toprule
+%     用例名称  & 参与者 & 前置条件 & 主要流程 \\
+%     \midrule
+%     创建帧图层到硬件平面的绑定计划 & 合成器模块 & 已获取待显示的图层列表，管线中有可用平面资源 & 从显示资源管线获取当前可用的硬件平面列表并为其选择一个支持的硬件平面。\\
+%     % 创建帧图层到硬件平面的绑定计划 & 合成器模块 & 已获取待显示的图层列表，管线中有可用平面资源 & 初始化空的渲染计划并从显示资源管线获取当前可用的硬件平面列表，同时遍历每个图层，
+%     % 为其选择一个支持的硬件平面。若无可用平面，立即返回空值。记录每个绑定的图层、平面和Z叠加位置，同时在所有图层匹配成功后返回完整的渲染计划。 \\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
 
-\subsubsection{非功能需求}
+\subsubsection{验证与显示}
+在HWC2模块中，较为核心的两个函数分别是PresentDisplay和ValidateDisplay，分别用于模块的显示和验证。其中PresentDisplay的核心功能实现是创建合成并显示，用例描述
+如表\ref{tab:提交帧显示合成用例描述}，而ValidateDisplay是用于判断当前帧的图层是否可以通过设备（KMS）硬件直接合成（Device Composition），
+还是必须由 GPU 进行合成（Client Composition），用例描述如表\ref{tab:验证帧合成用例描述}。
 
-​兼容性​:适配主流 DRM 系统，支持龙芯LG系列GPU的显存管理，兼容 Android 10+的HIDL接口。
+\begin{table}[H]
+  \centering
+  \caption{提交帧显示合成用例描述}
+  \label{tab:提交帧显示合成用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 提交帧显示合成 \\
+    \midrule
+    用例描述 & 创建并提交一帧显示合成计划 \\
+    执行者 & HWC2模块 \\
+    前置条件 & 系统中存在支持的DRM显示设备与资源，且有2种图层（client和device） \\
+    后置条件 & 返回上层调用信息 \\
+    基本事件流 & \makecell[l]{ 1）遍历图层列表并按Z顺序排序所有图层\\
+    2）将排序后的每个图层导入framebuffer句柄\\
+    3）创建合成计划，并使用原子提交向硬件提交显示帧}\\
+    异常事件流 & 1）合成计划创建失败返回 \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-稳定性与安全性:支持 DRM Master 丢失后重新初始化显示管道以实现异常恢复，单个Connector故障不影响其他显示输出
+\begin{table}[H]
+  \centering
+  \caption{验证帧合成用例描述}
+  \label{tab:验证帧合成用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 验证帧合成 \\
+    \midrule
+    用例描述 & 验证图层合成配置是否满足硬件能力 \\
+    执行者 & HWC2模块 \\
+    前置条件 & 显存管理与DRM资源正常且有多个图层需要合成 \\
+    后置条件 & 返回上层调用信息 \\
+    基本事件流 & \makecell[l]{ 1）Z顺序排序所有图层\\
+    2）执行client合成策略\\
+    3）提交合成计划}\\
+    异常事件流 & 1）合成失败需退回Client合成 \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-\subsection{图形缓存分配模块需求分析}
+% \begin{table}[H]
+%   \centering
+%   \caption{验证与显示用例表}
+%   \label{tab:验证与显示用例表}
+%   \begin{tabular}{p{3cm}p{3cm}p{3cm}p{3cm}}
+%     \toprule
+%     用例名称  & 参与者 & 前置条件 & 主要流程 \\
+%     \midrule
+%     创建并提交一帧显示合成计划 & HWC2模块 & 系统中存在支持的DRM显示设备与资源，且有2个图层（client和device） & 遍历图层列表，
+%     按Z顺序排序图层同时将排序后的每个图层导入句柄，并创建合成计划并提交 \\
+%     验证图层合成配置是否满足硬件能力 & HWC2模块 & 显存管理与DRM资源正常且有多个图层需要合成 & Z顺序排序所有图层，执行client合成策略，尝试提交合成计划。
+%     合成失败需退回Client合成。 \\
+%     % 创建并提交一帧显示合成计划 & HWC2模块 & 系统中存在支持的DRM显示设备与资源，且有2个图层（client和device） & 需要遍历图层列表，
+%     % 按Z顺序排序图层同时将排序后的每个图层导入framebuffer句柄，并创建合成计划，随后使用原子提交向硬件提交显示帧 \\
+%     % 验证图层合成配置是否满足硬件能力 & HWC2模块 & 显存管理与DRM资源正常且有多个图层需要合成 & 在上层触发调用后系统会获取所有图层并按Z顺序排序
+%     % ，依据策略，图层是否需被标记为Client合成，随后需要判断各图层是否支持硬件合成，对非全部Client合成情况，尝试提交合成计划。若合成失败则全部退回到Client合成，传输
+%     % 需要Client合成等信息返回以提供SurfaceFlinger判断。 \\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
 
-\subsubsection{功能需求}
+% \subsubsection{原子提交}
 
-    ​GPU硬件兼容性​：支持GSGPU等LoongArch下GPU驱动。适配DRM/KMS接口，正确处理IOCTL命令。
+% 原子提交指的是使用 DRM 的原子模式（Atomic Modesetting）进行图像显示配置提交，
+% 这种机制的核心特点是将多个显示相关的属性配置打包成一个原子操作提交给内核，要么全部成功应用，要么全部失败回滚，系统不会出现中间状态。
+% 这种相较于非原子模式可以提升显示系统的稳定性与一致性，避免屏幕撕裂、闪烁、资源冲突等问题。
+% 在每帧创建DRM提交请求之前，需要配置CRTC的状态、图层的帧缓冲区、位置、层级等。在提交失败之后，及时打印相应的日志。
 
-    ​缓冲区分配与管理​：支持常见像素格式及修饰符。实现显存与系统内存的自动选择策略，优先使用显存提升性能。
+\subsubsection{缓冲区信息适配}
 
-    ​跨API共享​：通过DMA机制导出缓冲区句柄，支持跨进程间的零拷贝数据传输。提供缓冲区对象的导入/映射接口，兼容EGL/GLES纹理绑定流程。
+在HWC模块中，Gralloc提供的buffer handle需要被解析和转换为底层DRM可识别的格式。这个过程不仅涉及handle的解封装，也要求支持各种图像格式，并满足硬件的对齐与压缩要求。
+同时，由于安卓不同版本Gralloc的差异，需要对Gralloc接口进行支持，兼容Android 12的IGraphicBufferAllocator和IMapper HIDL 接口，
+支持 GBM和 DRM 格式的互转，保证缓存格式和对齐满足硬件要求。该模块需要从缓冲区句柄中通过Gralloc模块的接口获取缓冲区的属性信息，用例如表\ref{tab:提取合成元数据用例描述}。
 
-\subsubsection{性能优化}
+\begin{table}[H]
+  \centering
+  \caption{提取合成元数据用例描述}
+  \label{tab:提取合成元数据用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 提取合成元数据 \\
+    \midrule
+    用例描述 & 提取Gralloc模块的数据属性 \\
+    执行者 & 缓冲区信息适配模块 \\
+    前置条件 & 图层已经通过Gralloc分配，传入了有效的缓冲区句柄 \\
+    后置条件 & 获取到目标属性 \\
+    基本事件流 & \makecell[l]{ 1）调用Gralloc接口获取完整的缓冲区信息\\
+    2）将上述字端存入本地}\\
+    异常事件流 &  1）调用接口获取信息失败\\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
 
-    ​内存复用​​：设计缓冲区缓存池，减少频繁分配/释放带来的内存碎片及性能开销，缓冲区复用的时间不超过0.3ms。
+% \begin{table}[H]
+%   \centering
+%   \caption{缓冲区信息适配用例表}
+%   \label{tab:缓冲区信息适配用例表}
+%   \begin{tabular}{p{3cm}p{3cm}p{3cm}p{3cm}}
+%     \toprule
+%     用例名称  & 参与者 & 前置条件 & 主要流程 \\
+%     \midrule
+%     提取合成元数据 & 缓冲区信息适配模块 & 图层已经通过Gralloc分配，传入了有效的buffer\_handle\_t & 调用接口获取完整的缓冲区信息并构建缓冲区元信息 \\
+%     % 提取合成元数据 & 缓冲区信息适配模块 & 图层已经通过Gralloc分配，传入了有效的buffer\_handle\_t & 调用gralloc perform接口获取完整的缓冲区信息并构建hwc\_drm\_bo\_t填入上述字端 \\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
 
-    ​异步操作支持​：提供异步缓冲区映射接口，避免阻塞渲染线程。
+\subsection{图形缓存分配需求分析}\label{p:图形缓存分配需求分析}
 
-\subsubsection{非功能需求}
-        
-    兼容性:兼容Android 12，支持Kernel 5.10及DRM/KMS子系统。
-        
-    安全性:​确保不同进程的缓冲区访问权限隔离以实现内存隔离，缓冲区对象需通过引用计数自动释放以抗内存泄漏
+Gralloc模块是串联GPU硬件能力和系统服务的中间件，其不仅需要对硬件能力进行抽象实现，还需要实现安卓HAL接口规范，以提供对上层服务的功能支持。因此图形缓存分配功能主要分为硬件功能支持以及
+HAL接口功能实现，支持的用例如图\ref{fig:图形缓存分配用例图}。
 
-    可维护性：分离硬件后端与通用逻辑，便于新增GPU支持，集成Android Logcat，提供关键操作的调试日志。
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\textwidth]{图形缓存分配用例图.pdf}
+  \caption{图形缓存分配用例图}
+  \label{fig:图形缓存分配用例图}
+\end{figure}
 
-\subsubsection{接口需求}
+\subsubsection{硬件功能支持}
+缓冲区分配与管理功能构成了整个系统运行的基础，其核心职责是为上层图形框架和硬件模块提供统一、高效、跨平台的图像缓冲区资源。
+统一的缓冲区管理可以避免内存碎片，解决冗余数据拷贝和跨模块接口等问题，可以提升图形数据处理效率与系统整体性能。其功能包括缓冲区的创建、销毁、导入、映射、解除映射等核心功能。
+% 同时在分配时可基于多个关键维度进行决策，包括图像格式、分辨率、使用场景，以及平台后端。
+缓冲区管理需要具备兼容龙芯LG系列GPU的后端机制，系统需要根据不同版本的GPU抽象出buffer object分配逻辑，保证核心接口一致性的同时保留添加新特性的能力。
+% 现代图形栈中，各个硬件模块往往由不同的驱动控制，并在用户空间有独立的处理流程。为实现模块间的高效协作，需要一种安全、高效的机制来在进程之间、驱动之间共享图像缓冲区。
+而在缓冲区共享功能下，缓冲区被一旦分配成功，它就必须具备被导出给其他使用者的能力。这要求系统能将缓冲区封装为一种可识别、可传递、可管理的资源对象。
+在 Linux 图形系统中，DMA-BUF是事实上的共享内存标准，系统需要将自身内部的缓冲区对象导出为一个 DMA-BUF 文件描述符，导出的 FD 可以通过标准UNIX机制传递给其他用户空间模块。
+而导出的缓冲区不仅仅是一个裸文件描述符，系统还需要一套详细的元信息描述机制，需要配合尺寸、格式、每行字节跨度（stride）、plane 分布、对齐要求等参数信息。
+而在缓冲区共享功能要求的同时，需要支持生命周期管理与引用追踪。在多进程系统中，一个缓冲区可能被多个模块同时使用，它的释放必须延迟到所有使用者均释放之后。
+因此需要一个引用计数机制，对缓冲区导入导出时确定生命周期，避免出现资源泄露的风险。最后在功能设计上还需要考虑共享后的缓存一致性与同步功能。
+另外适配DRM/KMS接口，正确处理IOCTL命令，通过drmIoctl和DRM内核子系统交互，并且支持GSGPU的缓冲区。
+% 按照GBM接口标准，应有如下表\ref{tab:硬件功能支持用例表}所示功能。
 
-Gralloc模块需要完成内存分配、缓冲区映射、缓冲区管理、性能优化等多方面的功能，hwcomposer模块则需要实现图层管理、显示输出、合成控制、与Gralloc适应相关的功能。
+缓冲区创建是使用缓冲区的 plane 结构、字节对齐规则、stride 计算方式等底层参数，通过DRI驱动或者内核调用向底层申请缓冲区，用例如表\ref{tab:缓冲区创建用例描述}。
+缓冲区映射就是将一个缓冲区从显卡的地址空间映射到系统空间，用例如表\ref{tab:缓冲区映射用例描述}。缓冲区导入是从从外部缓冲区对象中导入缓冲区，
+也可以通过DRI驱动或者构造内核命令申请导入，缓冲区解除映射则是在保证源目的数据一致的前提下解除映射。
+
+\begin{table}[H]
+  \centering
+  \caption{缓冲区创建用例描述}
+  \label{tab:缓冲区创建用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 缓冲区创建 \\
+    \midrule
+    用例描述 & 创建指定格式的缓冲区 \\
+    执行者 & 硬件功能支持模块 \\
+    前置条件 & 输入宽、高、格式、用途等核心参数及缓冲区对象 \\
+    后置条件 & 返回调用结果 \\
+    基本事件流 & \makecell[l]{ 1）使用DRI驱动创建缓冲区对象\\
+    2）带修饰符向DRI驱动创建缓冲区对象 \\
+    3）将申请的缓冲区文件描述符转换为缓冲区句柄}\\
+    其他事件流 & \makecell[l]{1）使用内核调用创建缓冲区对象 \\
+    2）不带修饰符向DRI驱动创建缓冲区对象} \\
+    异常事件流 & \makecell[l]{1）DRI驱动创建失败 \\2）内核创建失败} \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{缓冲区映射用例描述}
+  \label{tab:缓冲区映射用例描述}
+  \begin{tabular}{ll}
+    \toprule
+    用例名称  & 缓冲区映射 \\
+    \midrule
+    用例描述 & 将一个缓冲区从显卡的地址空间映射到系统空间 \\
+    执行者 & 硬件功能支持模块 \\
+    前置条件 & 输入缓冲区对象、虚拟地址以及映射标志 \\
+    后置条件 & 返回调用结果 \\
+    基本事件流 & \makecell[l]{ 1）是显卡地址空间则申请系统内存\\
+    2）拷贝原缓冲区至系统内存\\
+    3）获取目标地址 \\
+    4）向内核申请映射 }\\
+    其他事件流 & \makecell[l]{1）需要写入合并核申请系统内存 }\\
+    异常事件流 & 1）内核映射调用失败 \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+% \begin{table}[H]
+%   \centering
+%   \caption{硬件功能支持用例表}
+%   \label{tab:硬件功能支持用例表}
+%   \begin{tabular}{p{3cm}p{3cm}p{3cm}p{3cm}}
+%     \toprule
+%     用例名称  & 参与者 & 前置条件 & 主要流程 \\
+%     \midrule
+%     驱动初始化 & 硬件功能支持模块 & 输入驱动的文件描述符 & 查询初始化硬件信息并加载DRI驱动等，启动XDMA的初始化并对底层的像素格式添加GBM缓冲区用途标志等。 \\
+%     缓冲区创建 & 硬件功能支持模块 & 输入宽、高、格式、用途等核心参数及缓冲区对象 & 根据硬件支持和策略，创建相应的线性或非线性缓冲区对象。 \\
+%     缓冲区导入 & 硬件功能支持模块 & 输入宽、高、格式、用途等核心参数及缓冲区对象 & 从外部缓冲区对象中导入缓冲区。 \\
+%     缓冲区映射 & 硬件功能支持模块 & 输入缓冲区对象、虚拟地址以及映射标志 & 将一个缓冲区从显卡的地址空间映射到指定虚拟地址的系统空间。 \\
+%     缓冲区解除映射 & 硬件功能支持模块 & 输入缓冲区对象、虚拟地址 & 在保证源目的数据一致的前提下解除映射 \\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
+
+\subsubsection{HAL接口功能实现}
+HAL接口功能实现是兼容Android 12，满足Gralloc HAL的接口。
 Gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/hardware/interfaces/graphics/mapper下，
-其中HAL接口表统计如表\ref{tab:gralloc模块HAL接口}。
+其中HAL接口表统计如表\ref{tab:gralloc模块HAL接口}，其功能有相关约束，此处仅介绍。
 
 \begin{table}[h]
   \centering
@@ -212,8 +516,49 @@ Gralloc模块HAL接口分别定义在/hardware/interfaces/graphics/allocator和/
   \note{}
 \end{table}
 
+\section{非功能需求}
+
+\subsection{兼容性}
+\label{p:兼容性}
+
+驱动内核层需要对接硬件底层功能接口，主要是对图形内存对象管理的IOCTL命令进行封装，包括支持处理上下文、命令流、内存映射、调用等核心功能。
+另外龙芯平台的 GSGPU 驱动当前处于闭源状态，尚未主线合入内核源码树。而在此情况下，内核版本的更迭，特别是在图形领域的DRM模块，接口常常因为硬件特性的变化而变动。
+因此，需要兼容Linux内核版本4.19/5.10以及libdrm。具体来说就是要在不同内核平台下构建同一驱动，加载并通过设备和libdrm相关测试。
+同时为了兼顾模块化的需求，驱动应以内核模块形式构建（可通过 modprobe/rmmod 加载卸载）。
+
+% 2.安卓图形系统的合成器实现需要兼容Android HWC接口，需要支持Android 10至Android 14 的 HIDL/或 AIDL HWC 接口规范，
+% 同时保证 SurfaceFlinger 与composer HAL之间的调用接口稳定，不破坏 CTS要求。
+% 同时，需要支持龙芯 LG 系列 GPU 的显存管理架构，特别适配VRAM 与 GTT 双域内存结构。
+
+% 2.OpengGL ES由用户态驱动Mesa实现，主要为安卓图形系统的Skia绘图引擎提供图形编程接口支持。因此在构建OpenGL ES支持后，应对图形编程接口进行兼容性测试，也就是
+% 对渲染引擎进行测试，以验证图形编程接口的兼容性。
+
+\subsection{稳定性​}
+
+1.内核驱动模块化构建：内核驱动应以模块形式构建（可通过 modprobe/rmmod 加载卸载），确保模块初始化和退出流程健壮。
+在龙芯3A5000处理器以及7A2000桥片真机环境下，持续稳定运行时间超过48H，运行期间内核日志无Oops、Panic、BUG等崩溃类错误以及WARN\_ON、WARNING、BUG\_ON等严重警告错误，
+且可以连续加载卸载模块的次数超过50次，在加/卸载期间同样无严重日志警告错误。
+
+2.合成器异常恢复及容错：支持 DRM Master 丢失后的重新绑定逻辑，自动恢复显示状态。对 Connector 熄灭等异常进行检测与恢复。
+同时支持超时与故障告警机制，防止系统卡死或死循环。同时应当多个输出通道独立运行，任一通道故障不影响其他显示输出。
+
+3.缓存分配应确保不同进程的缓冲区访问权限隔离以实现内存隔离，缓冲区对象需通过引用计数自动释放以抗内存泄漏。
+
+\subsection{性能需求}
+
+1.​缓冲区分配​性能：在龙芯3A5000处理器、7A2000桥片和内存8GB真机环境下（后续称为龙芯安卓系统环境），运行Android Naive OpenGL ES程序时，去除预热时数据，
+在进入渲染交换稳定状态之后针对4B大小的像素格式带宽达到2.5Gb以上，每秒可以分配不低于250个缓冲区，在2B像素格式下带宽达到5Gb以上，每秒可以分配不低于300个缓冲区。
+%缓冲区分配延迟、 缓冲区导出时间、CPU映射开销等核心实现为主要需求，其中缓冲区分配延迟平均时间不超过0.5ms，95\%的延迟时间不超过0.8ms，最大延迟不超过1ms，缓冲区导出平均时间不超过0.1ms，95\%的延迟时间不超过0.3ms，
+% 而CPU映射操作平均耗时不超过0.5ms。
+
+2.GPU图形吞吐能力与命令提交效率要求：在龙芯安卓系统环境下，基于gl2\_perf测试以常见着色器以及纹理类型为运行前提，MPPS性能体现了GPU 像素填充带宽，
+在1080p 分辨率、默认帧缓冲格式（RGBA8888）下，最低MPPS不低于1000，DC60不低于10。
+
+3.CPU端处理开销：在龙芯安卓系统环境下，进入稳定状态下的平均缓冲区交换时延不超过1ms。
+% 3.系统资源消耗：图形缓存分配模块在龙芯安卓系统环境下、8GB内存上持续运行时的CPU占有率应小与2.5\%，内存占有率应小与3\%。
+
 \section{本章小结}
-本章围绕着安卓图形栈的运行机制进行分析，
-从关键服务分析、架构差异分析以及安卓兼容性三个方面进行分析，总结图形系统方案，
-并对整体结构进行了概述。随后对于其中两个主要模块，图形缓存分配模块和硬件混合渲染模块进行需求分析。
+本章节围绕安卓图形系统展开需求分析，从需求导出、功能性需求以及非功能性需求对系统进行分析。
+需求导出分析了安卓图形栈的运行机制，从关键服务分析、架构差异分析以及安卓兼容性三个方面进行分析。功能性需求包括硬件混合渲染需求以及
+图形缓存分配需求，非功能需求从兼容性、稳定性以及性能需求三个方面进行分析。
 

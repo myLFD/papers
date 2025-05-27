@@ -12,25 +12,30 @@
   随着信息技术的范式变革，移动端图形处理需求呈现指数级增长。Android作为占据全球市场份额76\%的移动操作系统，
   其图形子系统的性能与兼容性已成为影响用户体验的关键要素。其中，GPU驱动作为协调性能与稳定性的核心组件，
   直接决定着图形系统的运行效能。然而在Android商业化环境中，主流GPU厂商为保有竞争力多选择生态闭源导致硬件规格文档与驱动源码获取困难，
-  这严重制约了基于自主架构的图形系统研究。针对这一现状，本文基于LoongArch架构与龙芯显卡，围绕 Android 图形系统进行了以下工作:
+  这严重制约了基于自主架构的图形系统研究。针对这一现状，本文基于LoongArch架构与龙芯LG系列显卡，围绕 Android 图形系统进行了以下工作:
   
-  1.分析安卓图形系统整体结构并对关键模块需求分析。本文从关键服务、架构差异以及安卓兼容性三个方面对安卓图形栈系统进行分析，将图形系统分为
-  loongson硬件支持、AOSP系统服务以及关键模块。其中关键模块包括GPU驱动内核模块、硬件混合渲染模块以及图形缓存分配模块的关键模块，
-  随后对三个模块进行需求分析。
+  1.实现了兼容龙芯显卡的安卓图形系统。系统依赖于两个关键功能硬件混合渲染和图形缓存分配。
+  硬件混合渲染负责显示资源管理、合成计划创建、验证与显示、缓冲区信息适配等核心功能，
+  而图形缓存分配采用缓冲区复用与零拷贝技术，基于GBM接口标准实现了基于龙芯LG显卡的缓冲区创建、导入、映射、同步等核心功能。
 
-  2.实现了三个关键模块。实现了显卡驱动内核模块，实现了DRM内核模块与用户态之间的交互命令码，用于从用户空间提交 GPU 命令到 GPU 处理器的高效传输。
-  为适配不同的内核版本，本课题基于内核模块接口的变化特性，设计了一种多版本适配方案，弥补了驱动因为内核版本变动而导致的差异。
-  基于龙芯硬件接口，实现了 Android 关键依赖模块——硬件混合渲染器（HWC）和图形缓存分配器（Gralloc）。
-  其中，图形缓存分配器采用缓冲区复用与零拷贝技术，优化缓冲区分配与映射效率；
-  硬件混合渲染器则作为合成器，为上层 Android 应用提供帧合成与显示支持。
+  2.针对兼容硬件底层功能接口的需求，本文实现了龙芯LG显卡的DRM内核模块与用户态之间的交互命令码，用于从用户空间提交GPU命令到GPU处理器的高效传输。
+  同时为解决内核版本变动导致DRM模块接口不一致的问题，本文基于内核模块接口的变化特性，设计了一种多版本适配方案，弥补了驱动因为内核版本变动而导致的差异。
 
-  3.解决了龙芯平台Android系统的软件栈适配问题，增加OpenGL ES支持以及访存优化，并针对硬件特性定制了部分Android系统镜像，
-  成功打通系统显示通路，构建了完整的支持龙芯 GPU 的 Android 运行环境。
+  为验证系统的正确性与可用性，本文基于Android 官方测试集对各模块进行了测试。结果表明，本文在LoongArch平台上成功构建了支持国产龙芯GPU的Android 图形系统。同时经性能测试验证，
+  缓冲区模块满足设计要求需求。经上所述，该课题实现了龙芯LG系列显卡与Android框架的高效协同，为后续LoongArch平台的Android系统部署与生态完善奠定了坚实基础。
 
-  为验证系统的正确性与可用性，本文基于 Android 官方测试集对各模块进行了正确性验证和回归测试。
-  结果表明，本文率先在LoongArch平台上成功构建并稳定运行了支持龙芯GPU的Android 图形系统。同时经性能测试验证，
-  缓冲区复用命中时间不超过0.3ms，满足设计要求，同时龙芯GPU的渲染能力每秒绘制的百万像素量均超过1200，可满足基础的图形绘制任务，并且Tile优化后的性能提升约58\%。
-  经上所述，该课题实现了龙芯LG系列显卡与Android框架的高效协同，为后续LoongArch 平台的 Android 系统部署与生态完善奠定了坚实基础。
+  % 1.实现了兼容龙芯显卡的安卓图形系统。本文对图形系统的实现进行需求分析，通过关键服务、架构差异以及安卓兼容性三个方面将需求导出，
+  % 并将待实现功能分为硬件混合渲染和图形缓存分配两个功能模块，同时对兼容性、稳定性、性能等非功能需求作出约束。
+  % 从图形系统整体架构上介绍了功能模块在整个图形系统中的位置，并对功能模块进行概要设计。具体为硬件混合渲染模块包括DRM管理模块、HWC2接口模块以及合成器模块等5个模块，
+  % 图形缓存分配模块包括硬件支持模块和功能实现模块，并分析了模块间的数据流动。
+
+  % 2.详细设计并实现了三个模块。实现了显卡驱动内核模块，实现了DRM内核模块与用户态之间的交互命令码，用于从用户空间提交GPU命令到GPU处理器的高效传输。
+  % 为适配不同的内核版本，本课题基于内核模块接口的变化特性，设计了一种多版本适配方案，弥补了驱动因为内核版本变动而导致的差异。
+  % 硬件混合渲染模块包括显示资源管理、合成计划创建、验证与显示、缓冲区信息适配等核心功能。图形缓存分配模块采用缓冲区复用与零拷贝技术，
+  % 硬件支持模块实现了缓冲区创建、导入、映射、同步等核心功能，功能实现模块实现了对安卓Gralloc HAL中Allocate和Mapper的接口功能。
+
+  % 3.解决了龙芯平台Android系统的软件栈适配问题，增加OpenGL ES支持以及访存优化，并针对硬件特性定制了部分Android系统镜像，
+  % 成功打通系统显示通路，构建了完整的支持龙芯 GPU 的 Android 运行环境。
   
 \end{abstract}
 
@@ -48,32 +53,25 @@ This poses significant challenges to research efforts focused on graphics system
 In response to this issue, this thesis focuses on the Android graphics system based on the LoongArch architecture and Loongson GPUs, 
 and achieves the following:
 
-1.Analysis of the Android Graphics System Architecture and Key Module Requirements:
-This thesis analyzes the Android graphics stack in terms of key services, architectural differences, 
-and Android compatibility. The graphics system is divided into three main layers: Loongson hardware support, 
-AOSP system services, and critical components. The critical components include the GPU kernel driver, 
-the hardware composition module, and the graphics buffer allocator. A detailed requirement analysis is conducted for each of these three modules.
+1.Implemented an Android graphics system compatible with Loongson GPUs. 
+The system relies on two key features: hardware-based hybrid rendering and graphic buffer allocation.
+Hardware hybrid rendering handles core functionalities such as display resource management, composition plan generation, 
+validation and presentation, and buffer information adaptation.
+Graphic buffer allocation adopts buffer reuse and zero-copy techniques, and is implemented based on the GBM interface standard, 
+supporting core operations such as buffer creation, import, mapping, and synchronization for the Loongson LG GPU.
 
-2.Implementation of Three Key Modules:
-A GPU kernel driver is implemented, along with DRM kernel module interfaces that enable efficient communication 
-between the kernel and user space for submitting GPU commands. To ensure compatibility across different kernel versions, 
-a multi-version adaptation strategy is designed based on kernel interface evolution. On top of Loongson hardware, 
-the hardware composer (HWC) and graphics allocator (Gralloc), which are essential components in Android, are also implemented. 
-The graphics allocator uses buffer reuse and zero-copy techniques to optimize memory allocation and mapping, 
-while the hardware composer acts as the compositor, providing frame composition and display support for upper-layer Android applications.
+2.To meet the requirements of interfacing with compatible hardware at the low level, 
+this work implements the command interface between the DRM kernel module and user space for the Loongson LG GPU. 
+This enables efficient transmission of GPU commands from user space to the GPU processor.
+Additionally, to address inconsistencies in the DRM module interface caused by kernel version changes, 
+a multi-version adaptation scheme was designed based on the characteristics of kernel module interface changes. 
+This approach compensates for driver discrepancies resulting from kernel updates.
 
-3.Android Stack Adaptation on the Loongson Platform:
-This thesis addresses Android system adaptation issues on the Loongson platform, adding support for OpenGL ES and optimizing memory access. 
-Android system images are customized to match hardware characteristics, 
-enabling a complete display pipeline and building a fully functional Android runtime environment that supports Loongson GPUs.
+To verify the correctness and usability of the system, all modules were tested using the official Android test suite. 
+Results show that the Android graphics system supporting domestic Loongson GPUs was successfully built on the LoongArch platform. 
+Performance testing further confirmed that the buffer module meets the design requirements.
+In conclusion, this project achieves efficient integration between the Loongson LG series GPU and the Android framework, 
+laying a solid foundation for the deployment and ecosystem development of Android systems on the LoongArch platform.
 
-To verify the correctness and usability of the system, Android official test suites are used to conduct correctness validation 
-and regression testing on all modules. The results show that this work successfully builds and stably runs an Android graphics 
-system supporting Loongson GPUs on the LoongArch platform for the first time. Performance tests reveal that the buffer reuse hit time is under 0.3 ms, 
-meeting design requirements, and the Loongson GPU achieves a rendering capacity of over 1200 megapixels per second, sufficient for basic rendering tasks. 
-Furthermore, tile-based optimizations deliver an approximate 58\% performance improvement.
-
-In summary, this project achieves efficient integration of Loongson LG-series GPUs with the Android framework and 
-lays a solid foundation for future Android system deployment and ecosystem development on the LoongArch platform.
 
 \end{abstract*}

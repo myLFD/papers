@@ -1,42 +1,728 @@
 % !TeX root = ../main.tex
 
-\chapter{总结与展望}
+% \chapter{性能分析与优化（安全性与稳定性分析）}
+\chapter{系统测试}
 
-\section{工作总结}
+\section{测试环境与测试流程}
 
-本文基于安卓和龙芯GPU，设计并实现了一个安卓图形栈，填补了LoongArch架构下安卓图形系统的空缺，可以运行在龙芯常见的硬件环境下。由于GPU的软硬件环境较为复杂，本文仅涉及
-部分关键模块及库的构建。主要工作包括：
+\subsection{测试环境}
+由于AOSP仅源码就有130G之多，在完成编译之后达到212G，因此构建Android镜像需要一台性能充足构建机以及用于烧录运行镜像的测试机。
+构建机需要充足的存储空间以及编译大量内容，所以选择核数多性能强的服务器，测试机是目标系统镜像的运行平台。
 
-1.分析并设计安卓图形系统整体结构。本文围绕着安卓图形栈的运行机制进行分析，从关键服务分析、架构差异分析以及安卓兼容性三个方面进行分析。
-关键服务主要分析了渲染引擎和合成器引擎、架构差异主要分析了LoongArch架构和ARM架构下图形系统的差异、安卓兼容性主要分析了安卓S版本对硬件的要求。
-同时总结图形系统方案，并将图形系统分为loongson硬件支持、AOSP系统服务以及需要实现的模块三个部分。随后对于两个主要模块，图形缓存分配模块和硬件混合渲染模块进行需求分析。
+\textbf{构建机}：在构建安卓内核、镜像，以及编译loonggpu核模块都使用的是龙芯公司的X86服务器(所有模块都是交叉编译)，Xeon Gold 6388处理器，核数为128核。
 
-2.内核模块实现，基于Linux DRM框架，设计了17类IOCTL命令码，覆盖显存管理（GEM）、命令流控制（CS）、虚拟地址映射（VA）等核心功能。
-针对Linux内核版本差异（4.19至5.10），提出动态编译检测方案，通过条件编译实现接口兼容性，解决了闭源驱动的多版本适配问题。
-实现硬件抽象层和定制镜像，图形缓存分配器基于DMA-BUF框架，采用缓冲区复用与零拷贝技术，支持显存与系统内存的动态分配策略，优化了图形缓冲区的分配效率。
-通过HIDL接口实现绑定式服务，确保跨进程共享的安全性。
-硬件混合渲染器结合DRM/KMS子系统，实现图层合成与原子提交功能，支持主平面与光标平面的硬件加速合成，并通过VSync同步机制降低显示延迟。
-基于Mesa框架实现龙芯OpenGL ES 2.0支持，集成龙芯显卡后端。
-针对龙芯GPU的16KB页表特性，定制Android内核与Bionic库，修改文件系统与内存管理模块，成功适配Android 12的页表兼容性要求。
+\textbf{构建环境配置}：
 
-3.系统验证与测试：
-通过Android官方测试集对图形栈各模块进行验证，内核驱动通过环形缓冲区测试（IB、GFX、XDMA）及21项libdrm功能测试；
-Gralloc模块通过180项GrallocTypes\_test用例，覆盖元数据序列化、HDR支持等场景；
-SurfaceFlinger服务通过898项测试，包括多显示器管理、事务处理及渲染性能验证。
-实验结果表明，系统首次在LoongArch平台上实现Android图形栈的完整运行。
+    AOSP镜像构建：AOSP配置环境使用预先编译好的llvm15的编译器（这些前期已完成），通过AOSP项目提供的envsetup.sh脚本设置基本的环境变量，并lunch loongarch-3A5000选择构建目标，
+        设置特有的环境变量。编译上可以选择使用m编译全平台代码，mm编译某模块代码及其依赖或者使用mmm编译某个指定路径下的所有路径及其依赖\cite{罗升阳2016android}。
 
-本文首次在龙芯平台上实现Android图形系统的全栈适配，基于龙芯显卡实现了gralloc与HWC模块，并构建OpenGL ES和Tile访存优化，实现了龙芯LG显卡与安卓框架的高效协同，
-为后续基于该平台的开发和研究奠定了技术基础。
+    Android内核构建：编译工具链使用loongson\ gnu\ toolchain 8.3，使用自写脚本设置交叉编译环境变量，主要是PATH、LD\_LIBRARY\_PATH、CROSS\_COMPILE、ARCH等变量的指定，
+        最后使用make编译，可以使用-j(\$proc)添加编译核心数。
 
-\section{未来展望}
+    核模块构建：构建与内核编译类似，设置交叉编译环境后使用make即可编译。
 
-GPU所涉及的软件支持很复杂，包括编译器后端生成、图形编程接口的支持等，本文只涉及部分模块和内容。同样安卓系统也作为一个即其庞大而复杂的系统，其图形系统更是作为最复杂的系统之一，
-从工程实现和调试的角度来看都有不小的难度。本文所做的工作仅涉及部分模块的实现以及构建，接下来工作可以分成几个方向：
+\textbf{测试机}：运行主机使用龙芯的3A5000CPU，配备7A2000桥片。桥片上集成了LG110显卡，该显卡所使用的固件需要在Android内核构建时以被编入，而内核驱动在安卓系统进入shell时
+    通过insmod（/rmmod）加载（或删除）该模块。
 
-1.系统及硬件升级：当前方案仅适配Android S版本与龙芯3A5000平台，并且为了强行支持龙芯硬件特性对安卓系统镜像进行了许多定制，导致ART运行以及zygote等安卓APP无法运行，
-在测试上也带来了一定的困难，未来需扩展至更高版本安卓（如Android 15）支持更多的硬件特性及新一代龙芯硬件（如LG200），并针对Vulkan API支持等场景进行性能优化。
-从而实现在实际场景下的验证，如3D游戏、视频渲下的性能评估，运行一些常见的JAVA性能测试工具，测试帧率、功耗等关键指标。
-而LG110作为一个过渡性、研究性的GPU，是龙芯制造国产GPU道路上一个尝试性的产品，其本身具有许多瑕疵，不适合继续深入做研究，应尽快过渡至LG200。
+\subsection{测试流程}
+测试流程如图\ref{fig:实机测试流程}。由于目前没有模拟7A2000的模拟器，所以本课题测试及调试均在实机环境下完成。
+首先需要准备好安卓环境下的Native测试程序的可执行文件，这里的来源主要来自于AOSP的原生测试用例。启动测试机以及安卓镜像，进入命令行界面如图\ref{fig:安卓命令行界面}，
+在命令行中使用insmod加载内核驱动模块，通过上位机使用adb与运行的安卓系统进行连接，将测试程序推至相应的测试目录下，再运行相应的测试用例。如运行有问题则进行调试。
 
-2.该方案目前的重点是搭建一个可运行的图形环境，并探索相应的软件依赖方案，其实现上仍有许多不足。在完成对功能的完善后可以考虑更多定制化的方案进行优化，以实现更高效的图形环境。
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{真机测试流程.pdf}
+  \caption{实机测试流程}
+  \label{fig:实机测试流程}
+\end{figure}
 
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=1\textwidth]{安卓命令行界面.png}
+  \caption{安卓命令行界面}
+  \label{fig:安卓命令行界面}
+\end{figure}
+
+\subsection{程序调试}
+实机调试采用的是GDB工具加日志的方式。程序调试结构如图\ref{fig:程序调试结构图}所示，由于是实机环境，所以内核部分无法使用GDB，仅依靠日志输出完成调试。而在安卓环境下无法直接使用GDB调试某个程序或进程，所以采用测试机中后端加上位机前端的方式，
+即在安卓镜像中编译可运行的GDB工具后端gdbserver，gdbserver可以直接运行调试某个程序或者直接链接某个以运行的进程并等待GDB前端的连接。上位机通过网络与安卓测试机连接，
+使用GDB工具设置测试机的IP和端口进行连接，并设置根文件目录、动态库搜索目录强制加载当前进程中的动态库文件的符号表，从而实现对某一程序或进程的测试。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.8\textwidth]{程序调试结构图.pdf}
+  \caption{程序调试结构图}
+  \label{fig:程序调试结构图}
+\end{figure}
+
+\section{功能性测试}
+本节将对硬件混合渲染模块以及图形缓存分配模块进行测试。
+% 部分对图形栈方案进行测试，内核驱动测试用于验证安卓内核以及驱动内核模块的正确性。
+% 图形缓存分配模块测试用于验证该模块的正确性。由于硬件混合渲染模块为SurfaceFlinger的合成器引擎提供服务端功能，因此使用合成引擎测试用例对
+% 硬件混合渲染模块的正确性进行测试。渲染引擎测试用于对构建的OpenGL ES实现和LG110 DRI驱动进行测试。
+% 本课题的关键服务进程是SurfaceFlinger，因此在最后一节对SurfaceFlinger进行测试以完成对SurfaceFlinger进行支持这一既定目标。
+
+\subsection{硬件混合渲染模块测试}
+\label{sec:合成引擎正确性测试}
+
+设计一组测试用例用于测试相关实现功能，使用谷歌Mocking框架对实现功能进行测试。其中有关Hwc2的接口实现于表\ref{tab:libcompositionengine_test测试集}中涵盖。
+
+% \begin{longtable}{|c|c|c|}
+%   \hline
+%   编号 & 姓名 & 分数 \\
+%   \hline
+%   \endfirsthead
+  
+%   \hline
+%   编号 & 姓名 & 分数 \\
+%   \hline
+%   \endhead
+  
+%   % 表格数据
+%   1 & Alice & 90 \\
+%   2 & Bob & 85 \\
+%   3 & Charlie & 78 \\
+%   % ... 添加更多行
+  
+%   \hline
+%   \end{longtable}
+  
+\begin{longtable}{p{1cm}p{3cm}p{3cm}p{2cm}p{2cm}l}
+    \caption{硬件混合渲染功能测试集}\label{tab:硬件混合渲染功能测试集} \\
+    \hline
+    \makecell[l]{测试\\编号} &  测试内容 & 测试步骤 & 预期结果 & 执行结果 & 测试结果\\
+    \hline
+    \endfirsthead
+    \hline
+    \makecell[l]{测试\\编号} &  测试内容 & 测试步骤 & 预期结果 & 执行结果 & 测试结果\\
+    \hline
+    \endhead
+    FA1& 验证是否能够正确打开设备文件、获取资源并完成初始映射 & 使用mocking模拟设备、IOCTL和查询返回结构，验证函数是否成功初始化设备文件以及错误码 & 可以完成设备初始化 & 成功初始化设备 & 通过\\
+    FA2 & 验证是否可以正确查询DRM对象的目标属性名称 & mock drmModeObjectGetProperties返回一个假的property列表
+    并mock drmModeGetProperty返回一个带指定名字的property，随后调用该方法验证它是否被正确调用 & 可以查找到指定的property & 查找到了指定的property & 通过\\
+    FA3 & 验证是否能正确构建并绑定显示管线 & mock Drm硬件资源，并构造空的或多个主图层，并调用实现 & 主图层不合法导致绑定失败 & 绑定失败 & 通过\\
+    FA4 & 验证是否能正确构造原子提交请求并提交成功  & mock 构造资源并提交正确args以及有效mode & 内核调用返回0成功 & 内核调用返回0 & 通过\\
+    FA5 & 验证能够正确创建计划以及选择可用平面 & 创建DrmDisplayPipeline并模拟其可用平面，准备多个DrmPlane同时构造多个有效DrmHwcLayer作为输入，调用方法验证返回值 & 
+    返回有效指针并包含所有图层 & 返回的指针有效且包含所有的图层  & 通过\\
+    FA6 & 验证能否正确获取缓冲区属性 & 构造一个有效的 MockGralloc，设置调用返回预设值，调用方法并检查获取的属性 & 属性获取符合预设值 & 获得了符合预设值的属性  & 通过\\
+    \hline
+\end{longtable}
+
+
+这里测试集使用的是SurfaceFlinger的CompositionEngine的测试集libcompositionengine\_test，该测试集主要用于测试CompositionEngine功能的正确性。
+由于CompositionEngine是混合渲染器的客户端，所以该测试集实际上也会对\textbf{硬件混合渲染器}的实现进行测试。该测试集共有71个测试套件482个测试用例，现对测试套件的
+测试功能做简单归纳。如表\ref{tab:libcompositionengine_test测试集}所示，可分为6个主要部分，显示设备管理、合成引擎测试、硬件合成器测试、输出层测试、
+渲染表面与空间映射和Planner策略模块测试，目前可以通过全部的测试用例。
+
+\begin{table}[H]
+    \centering
+    \caption{libcompositionengine\_test测试集}
+    \label{tab:libcompositionengine_test测试集}
+    \begin{tabular}{lp{3cm}ll}
+      \toprule
+      类别 &  分类描述 & 数量 & 通过数量\\
+      \midrule
+      显示设备管理 & 硬件交互、颜色配置、基础显示配置 & 21 & 21\\
+      合成引擎测试 & 验证合成引擎提交、更新功能 & 4 & 4\\
+      硬件合成器测试 & HWC缓冲区测试 & 3 & 3\\
+      输出层测试 & 帧准备/提交、表面合成、光标等  & 33 & 33\\
+      渲染表面与空间映射 & 	离屏表面生命周期管理、坐标系变换算法 & 2 & 2\\
+      Planner策略模块测试 & 图层扁平化策略、纹理缓存预测模型、渲染成本优化 & 8 & 8\\
+      \bottomrule
+    \end{tabular}
+    \note{}
+\end{table}
+
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{libcomposer测试截图.png}
+%     \caption{libcomposer测试截图}
+%     \label{fig:libcomposer测试截图}
+% \end{figure}
+
+
+\subsection{图形缓存分配模块测试}
+
+
+% 图形缓存分配模块的测试采用谷歌官方提供的原生测试用例，是AOSP中framework（框架代码）提供的gralloc测试用例GrallocTypes\_test，
+% 其主要是使用GTest编写。
+% 补充功能测试采纳了gralloc0测试。这是是Android较早的图形内存管理接口，通常与较老的硬件和系统版本一起使用，
+% 它通过一套C函数接口提供图形 buffer 的分配、映射和释放等基本能力，用于验证模块的功能实现的正确性。
+
+设计一组功能测试用例，针对缓冲区创建、跨进程导入、映射等核心接口函数的功能实现，结果如表\ref{tab:图形缓存分配功能测试集}。
+% 包括4个核心的缓冲区操作测试：
+% 按照指定的
+% \begin{itemize}
+%   \item 按照指定的宽、高、像素格式、用途标志等调用bo\_create接口创建缓冲区
+%   \item 将GEM对象映射到用户空间，允许用户态直接访问显存。
+%   \item 创建/销毁GPU上下文，管理上下文资源。
+%   \item 管理一组缓冲区对象操作的集合，用于批量操作。
+% \end{itemize}
+
+\begin{longtable}{lp{3cm}p{3cm}p{2cm}p{2cm}l}
+  \caption{图形缓存分配功能测试集}\label{tab:图形缓存分配功能测试集} \\
+  \hline
+  \makecell[l]{测试\\编号} &  测试内容 & 测试步骤 & 预期结果 & 执行结果 & 测试结果\\
+  \hline
+  \endfirsthead
+  \hline
+  \makecell[l]{测试\\编号} &  测试内容 & 测试步骤 & 预期结果 & 执行结果 & 测试结果\\
+  \hline
+  \endhead
+  FB1& 创建指定格式的缓冲区对象 & 输入常见的宽度、高度、像素格式、用途标志等参数，使用调用缓冲区创建接口 & 返回非NULL的缓冲区对象 & 返回的缓冲区对象非NULL & 通过\\
+  FB2 & 跨进程使用文件描述符导入缓冲区对象 & 进程A创建缓冲区并导出fd，在进程B中使用fd调用bo\_import导入 & 进程B成功导入缓冲区对象 & 进程B中成功导入缓冲区对象 & 通过\\
+  FB3 & 缓冲区对象映射后写数据 & 使用bo\_map，写入像素值 & 内存可写，值正确更新 & 系统内存中的值已按预期更新 & 通过\\
+  FB4 & 缓冲区对象映射后解除映射  & 先调用bo\_map再调用bo\_unmap & 成功释放映射 & 成功释放映射 & 通过\\
+  \hline
+\end{longtable}
+
+% gralloc0测试主要测试了内存缓冲区的分配与释放、图形缓冲区锁定与解锁、API版本的兼容性等，测试项、用例描述和结果如表\ref{tab:gralloc0测试集}。
+
+% \begin{longtable}{lp{3cm}p{3cm}p{3cm}l}
+%   \caption{gralloc0测试集}\label{tab:gralloc0测试集} \\
+%   \hline
+%   \makecell[l]{测试\\编号} &  测试内容 & 测试步骤 & 预期结果 & 执行结果\\
+%   \hline
+%   \endfirsthead
+%   \hline
+%   \makecell[l]{测试\\编号} &  测试内容 & 测试步骤 & 预期结果 & 执行结果\\
+%   \hline
+%   \endhead
+%   S1& 测试不同尺寸缓冲区的分配和释放 & 多次输入（1000次以上）不同宽高组合并分配后释放 & 完成所有分配释放流程 & 符合预期结果\\
+%   S2 & 测试多种格式和用途组合的缓冲区分配 & 预输入一些的缓冲区格式和用途的组合，并逐次分配缓冲区后释放 & 完成所有组合的分配释放流程 & 符合预期结果\\
+%   S3 & 测试Gralloc模块的API版本，验证支持的功能 & 加载Gralloc硬件抽象并按API版本验证功能 & 通过功能验证 & 符合预期结果\\
+%   S4 & 测试缓冲区注册、注销、锁定和解锁操作的顺序  & 先调用bo\_map再调用bo\_unmap & 成功释放映射 & 符合预期结果\\
+%   \hline
+% \end{longtable}
+
+% \begin{table}[H]
+%     \centering
+%     \caption{gralloc0测试集}
+%     \label{tab:gralloc0测试集}
+%     \begin{tabular}{lll}
+%       \toprule
+%       测试项 & 测试内容 & 结果 \\
+%       \midrule
+%       test\_alloc\_varying\_sizes & 测试不同尺寸缓冲区的分配和释放 & passed\\
+%       test\_alloc\_combinations & 测试多种格式和用途组合的缓冲区分配 & passed\\
+%       test\_api & 测试 gralloc 模块的API版本，验证支持的功能 & passed\\
+%       test\_gralloc\_order & 测试缓冲区注册、注销、锁定和解锁操作的顺序 & passed\\
+%       test\_mapping & 测试CPU对内存的读取和写入 & passed\\
+%       test\_perform & 测试一些私有API操作，如获取缓冲区的额外信息等 & passed\\
+%       test\_ycbcr & 测试YUV格式的缓冲区的锁定操作 & passed\\
+%       test\_async & 测试异步锁定和解锁 & passed\\
+%       \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+
+GrallocTypes\_test是谷歌官方提供的原生测试用例，是AOSP中framework（框架代码）提供的gralloc测试用例GrallocTypes\_test，
+其主要是使用GTest编写。主要是用来验证Android12 系统中Gralloc4的功能，确保HAL功能实现符合Gralloc4标准。
+%确保与图形缓冲区相关的各种数据类型（如像素格式、压缩、元数据等）能够正确地序列化和反序列化。
+测试用例涵盖了广泛的输入类型，确保编码和解码过程能够正确工作，同时处理标准类型和扩展类型。
+测试包括基础数据类型测试、图像格式与布局测试、HDR元数据测试、核心功能组件测试、错误处理测试、辅助功能测试等。
+    % 基础数据类型测试：包括整数类型测试、浮点类型测试、字符串测试。
+
+    % 图像格式与布局测试：包括像素格式测试、平面布局测试、高级格式特性测试。
+
+    % HDR元数据测试: 包括静态HDR元数据、动态HDR元数据测试。
+
+    % 核心功能组件测试：包括缓冲区描述符测试、颜色空间测试。
+
+    % 错误处理测试：包括空指针校验、异常数据校验。
+    
+    % 辅助功能测试：标准类型的识别
+
+% 测试用例分类如表\ref{tab:GrallocTypeGtest测试用例分类}
+
+% \begin{table}[H]
+%     \centering
+%     \caption{GrallocTypeGtest测试用例分类}
+%     \label{tab:GrallocTypeGtest测试用例分类}
+%     \begin{tabular}{llllll}
+%       \toprule
+%       类别 & 描述  \\
+%       \midrule
+%       核心元数据 & BufferId/尺寸/层级/像素格式修饰符/用途标志  \\
+%       内存布局 & 步长/平面布局/子采样/总分配大小 \\
+%       安全特性 & 受保护内容标志 \\
+%       色彩处理 & 数据空间/混合模式/色度定位 \\
+%       HDR管道 & SMPTE 2086/CTA 861.3/SMPTE 2094-40 \\
+%       异常处理 & 空指针/无效数据/类型不匹配 \\
+%       扩展性支持 & 厂商自定义压缩方式/隔行扫描类型/色度定位策略 \\
+%       \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+
+经测试，已通过全部的21个测试套件共180个测试用例，结果如表\ref{tab:GrallocTypeGtest测试结果表}仅按测试套件名分类。
+
+\begin{longtable}[H]{llllll}
+    \caption{GrallocTypeGtest测试结果表}\label{tab:GrallocTypeGtest测试结果表}\\
+    \hline
+    测试套件 & 用例数量 &通过数量 & 测试套件 & 用例数量 &通过数量\\
+    \hline
+    \endfirsthead
+    \hline
+    测试套件 & 用例数量 &通过数量 & 测试套件 & 用例数量 &通过数量\\
+    \hline
+    \endhead
+    PlaneLayouts & 1 & 1 & String & 10 & 10 \\
+    Crop & 1 & 1 & PixelFormat & 5 & 5 \\
+    Errors & 3 & 3 & Compression & 5 & 5 \\
+    Helpers & 3 & 3 & Interlaced & 6 & 6 \\
+    Uint32 & 16 & 16 & ChromaSiting & 7 & 7 \\
+    Int32 & 7 & 7 & Dataspace & 4 & 4 \\
+    Uint64 & 72 & 72 & BlendMode & 4 & 4 \\
+    Int64 & 7 & 7 & Smpte2086 & 3 & 3 \\
+    Float & 7 & 7 & Cta861\_3 & 6 & 6 \\
+    Double & 7 & 7 & Smpte2094\_40 & 5 & 5 \\
+    BufferDescriptorInfo & 1 & 1 \\
+    \hline
+\end{longtable}
+
+\section{非功能性测试}
+
+\subsection{兼容性测试}
+
+\subsubsection{内核驱动兼容性测试}
+针对内核多版本兼容性设计测试用例，同时在4.19平台以及5.10平台同时构建内核驱动，
+并进行驱动设备测试，以验证设备已被正确构建并加载。
+设备模块测试需要通过内核的debugfs辅助测试，mount -t debugfs none debug挂载debug文件系统，对LG110的3个环形缓冲区进行测试，分别是
+ib、gfx、xdma。测试结果如表\ref{tab:内核多版本兼容性测试集及结果}。
+
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{内核驱动测试结果.png}
+%     \caption{内核设备测试结果}
+%     \label{fig:内核驱动测试结果}
+% \end{figure}
+
+\begin{table}[H]
+  \centering
+  \caption{内核多版本兼容性测试集及结果}
+  \label{tab:内核多版本兼容性测试集及结果}
+  \begin{tabular}{lp{3cm}p{3cm}p{2cm}p{2cm}l}
+    \toprule
+    \makecell[l]{测试\\编号} & 测试内容  &  测试步骤  & 预期结果 & 执行结果 & 测试结果\\
+    \midrule
+    NA1 & 对内核4.19平台测试内核驱动功能 & 使用4.19内核构建内核驱动并加载，进行设备测试 & 系统可以检测到硬件设备并通过设备测试 & 系统检测到了硬件设备并通过设备测试 & 通过\\
+    NA2 & 对内核5.10平台测试内核驱动功能 & 使用5.10内核构建内核驱动并加载，进行设备测试 & 系统可以检测到硬件设备并通过设备测试 & 系统检测到了硬件设备并通过设备测试 & 通过\\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+内核驱动的功能与libdrm密切相关，其中libdrm的兼容性测试包括GPU基础功能测试集、缓冲区对象功能测试集、DMA相关功能的测试集、死锁测试集和虚拟内存测试集，
+结果如表\ref{tab:libdrm_gsgpu测试集}。
+% libdrm中有关gsgpu的测试共有5个测试套件，使用Cunit单元测试框架编写如表\ref{tab:libdrm_gsgpu测试集}。其中：
+
+% basic\_tests是GPU基础功能测试集，包含测试查询GPU信息的功能、用户空间内存访问功能、缓冲区的逐出功能、GPU 命令提交的功能、多栅栏同步功能 、信号量功能共6部分。
+
+% bo\_tests是缓冲区对象功能测试集，包括缓冲区对象导入导出、缓冲区对象映射解映射、缓冲区对象的元数据处理功能、规范显卡内存分配、不规范显卡内存分配共5部分。
+
+% dma\_tests是DMA相关功能的测试集，包括DMA线性写、DMA常量填充、DMA线性拷贝测试、DMA Tiled拷贝测试、MSAA（多重采样抗锯齿）图像测试、Mipmap（多级渐远纹理）生成测试、
+% DMA信号量处理测试共7例测试用例。
+
+% deadlock\_tests是死锁测试集，测试GFX环和DMA环是否会发生死锁共两例。
+
+% vm\_tests是虚拟内存ID测试集，测试了虚拟内存ID（VMID）预留机制共一例。
+
+%共21例测试用例全部通过测试。
+
+\begin{table}[H]
+    \centering
+    \caption{libdrm\_gsgpu测试集及结果}
+    \label{tab:libdrm_gsgpu测试集}
+    \begin{tabular}{lll}
+      \toprule
+      类名   &  数量  &通过数量\\
+      \midrule
+      basic\_tests & 6 & 6\\
+      bo\_tests & 5 & 5\\
+      dma\_tests & 7 & 7\\
+      deadlock\_tests & 2 &2\\
+      vm\_tests & 1 &1\\
+      \bottomrule
+    \end{tabular}
+    \note{}
+\end{table}
+
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{GrallocTypeGtest测试图.png}
+%     \caption{GrallocTypeGtest测试图}
+%     \label{fig:GrallocTypeGtest测试图}
+% \end{figure}
+
+% \subsubsection{渲染引擎测试}
+% \label{sec:渲染引擎正确性测试}
+
+% 在安卓的图形系统中，渲染引擎实际上是在SurfaceFlinger进程中创建的一个skiaglthreaded模式，这是为了让所有的GL操作都在同一线程上进行，因为
+% OpenGL ES的一些实现要求在同一个线程中执行渲染操作。而在渲染引擎初始化时，会通过GLAPI接口调用具体驱动的GL实现。因此对渲染引擎的测试也是对\textbf{用户态驱动}
+% 以及\textbf{OpenGL ES实现}的测试。
+% librenderengine\_test也是AOSP中提供的安卓原生GTest测试用例，主要用于验证图形渲染引擎的功能、稳定性，确保渲染操作在各种场景下能够正确执行，
+% 以提供高效的图形和界面表现。该测试分为两个主要的测试套件：RenderEngineTest和RenderEngineThreadedTest。
+
+% \textbf{RenderEngineTest}是渲染管线测试，用于验证RenderEngine模块在不同场景下的正确性，确保图形层、颜色、阴影以及变换等操作正常工作，
+% 核心测试主要包括基础功能测试、高级渲染特性测试、缓冲区操作测试、异常与边界测试等，
+% 具体如表\ref{tab:RenderEngineTest测试分类}所示，276个测试用例全部通过。
+%     \begin{table}[H]
+%         \centering
+%         \caption{RenderEngineTest测试分类}
+%         \label{tab:RenderEngineTest测试分类}
+%         \begin{tabular}{lll}
+%           \toprule
+%           类别 & 测试用例示例 & 分类描述 \\
+%           \midrule
+%             基础绘制 & fillRedBuffer\_* & 纯色填充正确性 \\
+%             几何变换 & fillBufferCheckersRotate90\_* & 旋转矩阵应用正确性 \\
+%             颜色管理 & test\_isOpaque & 颜色空间转换与不透明处理 \\
+%             混合透明 & fillBuffer\_premultipliesAlpha & Alpha混合算法正确性 \\
+%             阴影渲染 & fillShadow\_casterWithRoundedCorner & 阴影形状与图层匹配性 \\
+%             模糊效果 & fillBufferAndBlurBackground\_* & 模糊半径与像素扩散效果 \\
+%             异常处理 & drawLayers\_nullOutputBuffer & 错误输入处理鲁棒性 \\
+%             资源管理 & cleanupPostRender\_cleansUpOnce & GPU资源释放及时性 \\
+%             缓冲区操作 & testClear & 透明清除层覆盖优先级 \\
+%           \bottomrule
+%         \end{tabular}
+%         \note{}
+%     \end{table}
+
+% \textbf{RenderEngineThreadedTest}是渲染线程测试，用于验证RenderEngineThreaded在多线程环境下是否正确代理调用、处理异步操作及状态同步。
+% 测试覆盖如表\ref{tab:RenderEngineThreadedTest测试分类}，并可以通过全部的19个测试用例。
+% %两个测试套件结果统计如表\ref{tab:librenderengine_test测试结果}
+
+% \begin{table}[H]
+%     \centering
+%     \caption{RenderEngineThreadedTest测试分类}
+%     \label{tab:RenderEngineThreadedTest测试分类}
+%     \begin{tabular}{lll}
+%       \toprule
+%       类别 & 测试用例示例 & 分类描述 \\
+%       \midrule
+%       资源管理测试 & genTextures & 验证纹理资源的创建与销毁流程 \\
+%       属性获取测试 & getMaxTextureSize* & 验证渲染引擎核心属性的正确返回值 \\
+%       上下文管理测试 & useProtectedContext & 验证保护上下文的切换逻辑与状态管理 \\
+%       功能支持检查测试 & supportsProtectedContent* & 确认渲染引擎对特定功能的支持性 \\
+%       异步操作测试 & primeCache & 验证异步任务执行与同步机制 \\
+%       渲染流程测试 & drawLayers & 验证核心渲染逻辑的正确性 \\
+%       清理操作测试 & PostRenderCleanup* & 检查渲染后资源清理的逻辑 \\
+%       工具方法测试 & dump & 验证调试与辅助功能的行为 \\
+%       \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+
+% \begin{table}[H]
+%     \centering
+%     \caption{librenderengine\_test测试结果}
+%     \label{tab:librenderengine_test测试结果}
+%     \begin{tabular}{lll}
+%       \toprule
+%       测试套件 & 用例数 & 通过数量 \\
+%       \midrule
+%       RenderEngineTest & 276 & 276 \\
+%       RenderEngineThreadedTest & 19 & 19 \\
+%       \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+%截图已注释，看情况放出
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{渲染引擎测试截图.png}
+%     \caption{渲染引擎测试截图}
+%     \label{fig:渲染引擎测试截图}
+% \end{figure}
+
+\subsection{稳定性测试}
+
+\subsubsection{内核驱动稳定性测试}
+
+设计一组测试集，用于测试内核驱动稳定性，用例和结果如表\ref{tab:内核驱动稳定性测试}。安卓的Doze模型是Android 6.0引入的一种省电机制，
+旨在通过限制应用对网络和CPU的使用来延长设备的电池寿命。这里Doze模式的不同状态，如INACTIVE，是指屏幕关闭进入非活动状态。
+上述稳定性测试，表明内核驱动较为稳定，达到了设计预期。
+
+\begin{table}[H]
+  \centering
+  \caption{稳定性测试集及结果}
+  \label{tab:内核驱动稳定性测试}
+  \begin{tabular}{lp{3cm}p{3cm}p{2cm}p{2cm}l}
+    \toprule
+    \makecell[l]{测试\\编号} & 测试内容  &  测试步骤  & 预期结果 & 执行结果 & 测试结果\\
+    \midrule
+    NB1 & 长时间连续运行渲染稳定性测试 & 启动系统，加载驱动并连续运行48小时 & 运行期间内核日志无严重日志警告错误 & 运行期间的日志输出无错误或严重警告 & 通过\\
+    NB2 & 模块重复加载/卸载测试 & 驱动模块是否可反复加载/卸载（50次） & 内核日志无严重日志警告错误 & 日志输出无错误或严重警告  & 通过\\
+    NB3 & 热插拔显示器测试 & 显示设备反复插拔（50次） & 显示器可以正常恢复图像输出 & 显示器恢复了正常图像输出 & 通过\\
+    NB4 & 屏幕关闭 + Doze INACTIVE模式 & 关闭屏幕并设置进入休眠模式后，打开屏幕后唤醒 & 显示器可以正常恢复图像输出 & 显示器恢复图像输出 & 通过\\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\subsubsection{合成器稳定性测试}
+
+设计一组稳定性测试集，针对合成器在异常场景下的恢复能力与容错机制设计，核心目标是验证系统在遭遇常见显示故障时能否保持稳定运行，并尽可能自动恢复。
+测试涵盖 DRM Master 丢失后的自动重试绑定、物理连接器（如 HDMI）断开与重连的处理、显示提交过程的超时保护机制，以及多显示通道之间的容错隔离能力，
+，用例和结果如表\ref{tab:合成器驱动稳定性测试}。
+
+\begin{table}[H]
+  \centering
+  \caption{合成器稳定性测试集及结果}
+  \label{tab:合成器驱动稳定性测试}
+  \begin{tabular}{lp{3cm}p{3cm}p{2cm}p{2cm}l}
+    \toprule
+    \makecell[l]{测试\\编号} & 测试内容  &  测试步骤  & 预期结果 & 执行结果 & 测试结果\\
+    \midrule
+    NC1 & DRM Master 丢失自动恢复 & 模拟进程抢占释放/dev/dri/card0 Master权限 & 显示可以恢复 & 显示器输出恢复 & 通过\\
+    NC2 & Connector 熄灭后自动重连 & 拔掉插回HDMI线 & 显示输出恢复 & 显示器输出恢复 & 通过\\
+    NC3 & 合成提交超时保护 & 模拟延迟检查 & 超时错误日志已提交 & 日志中有超时错误日志 & 通过\\
+    NC4 & 多通道容错隔离 & 主副屏使用VGA和HDMI，向VGA注入异常 & 异常注入期间HDMI显示输出无异常 & 异常注入期间HDMI显示无异常 & 通过\\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+\subsubsection{缓冲区分配稳定性测试}
+
+设计测试集用于验证用于验证图形缓冲区在多进程环境中的隔离性和自动管理能力，一是不同进程分配的缓冲区是否无法非法访问，另外测试引用计数是否准确，测试用例及结果如表\ref{tab:缓冲区稳定性测试}。
+
+\begin{table}[H]
+  \centering
+  \caption{缓冲区分配稳定性测试集及结果}
+  \label{tab:缓冲区稳定性测试}
+  \begin{tabular}{lp{3cm}p{3cm}p{2cm}p{2cm}l}
+    \toprule
+    \makecell[l]{测试\\编号} & 测试内容  &  测试步骤  & 预期结果 & 执行结果 & 测试结果\\
+    \midrule
+    ND1 & 跨进程非法访问权限隔离验证 & 进程A分配buffer，不导出同时进程B尝试使用无效handle访问该buffer & 系统拒绝访问，返回错误，进程B无法映射buffer & 进程B无法执行映射buffer操作，返回错误 & 通过\\
+    ND2 & 引用计数释放验证 & 多进程分配buffer并导出后关闭，检查底层buffer是否最后一次关闭后销毁 & fd直到最后引用释放后才释放 & 最后一个buffer关闭后fd才被释放 & 通过\\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+
+% \subsection{SurfaceFlinger测试}
+
+% SurfaceFlinger是Android 图形系统中的关键服务，负责管理和合成所有显示内容，它的正确运行是本课题图形栈方案正确性验证的关键，也是本课题最初预定的目标之一。
+% 其中合成器引擎和渲染引擎的测试已分别在\ref{sec:合成引擎正确性测试}和\ref{sec:渲染引擎正确性测试}中说明过。
+% 由于 SurfaceFlinger 直接影响到 Android 系统中图形界面的渲染效果，因此SurfaceFlinger的测试设计非常全面，共计94个测试套件898个测试用例，确保系统能够顺畅运行。
+% 在AOSP下，对SurfaceFlinger的测试包含两个部分，一个是SurfaceFlinger的单元测试libsurfaceflinger\_unittest，另一个是SurfaceFlinger\_test。
+
+% \textbf{libsurfaceflinger\_unittest}是安卓原生的测试集，58个测试套件共574个测试用例。如表\ref{tab:libsurfaceflinger_unittest测试分类}，可将测试用例分为9个主要测试类别。
+
+% \begin{table}[H]
+%     \centering
+%     \caption{libsurfaceflinger\_unittest测试分类}
+%     \label{tab:libsurfaceflinger_unittest测试分类}
+%     \begin{tabular}{lll}
+%         \toprule
+%         测试类别 & 代表测试套件	& 描述 \\ 
+%         \midrule
+%         显示管理 & DisplayIdentificationTest & 验证显示设备的连接、断开、配置和状态管理 \\
+%         合成与渲染 & CompositionTest & HWC/RE合成路径验证 \\
+%         VSync与调度测试 & VSyncDispatchTimerQueueTest & 验证垂直同步机制、调度策略及时间预测 \\
+%         事务处理测试 & TransactionApplicationTest & 验证事务队列、同步机制及帧事件追踪 \\
+%         性能监控与统计测试 & FpsReporterTest & 验证帧率统计、耗时分析及性能数据收集 \\
+%         异常处理 & InvalidHandleTest & 确保对错误输入、异常状态的鲁棒性 \\
+%         特殊功能 & GameModeTest & 游戏模式 \\  
+%         参数化测试 &  PerLayerType/SetFrameRateTest & 多图层类型帧率控制 \\
+%         \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+
+% \textbf{SurfaceFlinger\_test}也是安卓原生的GTest测试集，26个测试套件共324个测试用例。如表\ref{tab:SurfaceFlinger_test测试分类}所示，可分为10个主要测试类别。两个测试集结果统计如
+% 表\ref{tab:SurfaceFlinger测试结果}
+
+% \begin{table}[H]
+%     \centering
+%     \caption{SurfaceFlinger\_test测试分类}
+%     \label{tab:SurfaceFlinger_test测试分类}
+%     \begin{tabular}{lll}
+%         \toprule
+%         测试类别 & 代表测试套件	& 描述 \\
+%         \midrule
+%         权限与安全 & CredentialsTest， SetFlagsSecure & 权限控制、安全渲染 \\
+%         显示管理 & VirtualDisplayTest， MultiDisplay	& 多显示配置、虚拟显示 \\
+%         图层基础操作 & LayerTransactionTest， ChildLayerTest	& 创建/销毁/层级关系 \\
+%         图层高级特性 & LayerTypeTransactionTest， EffectLayer & 模糊/圆角/混合效果 \\
+%         渲染与合成 & SetFrameRateTest， SetDataspace	& 帧率控制、色彩空间 \\
+%         截图功能 & ScreenCaptureTest & 捕获逻辑、安全限制 \\
+%         异常处理 & InvalidHandleTest， SetInvalidColor & 非法输入容错 \\
+%         性能压力 & SurfaceFlingerStress	& 高频操作稳定性 \\
+%         事务处理 & LayerTransactionTest &   参数化用例 、原子性、合并逻辑 \\
+%         特殊场景 & MirrorLayerTest， BoundlessLayerTest & 镜像/无边界层处理 \\        
+%         \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+
+% \begin{table}[H]
+%     \centering
+%     \caption{SurfaceFlinger测试结果}
+%     \label{tab:SurfaceFlinger测试结果}
+%     \begin{tabular}{lll}
+%       \toprule
+%       测试集 & 用例数 & 通过数量 \\
+%       \midrule
+%       libsurfaceflinger\_unittest & 574 & 574 \\
+%       SurfaceFlinger\_test & 324 & 324 \\
+%       \bottomrule
+%     \end{tabular}
+%     \note{}
+% \end{table}
+
+%截图已注释，看情况放出
+% \begin{figure}[h]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{SurfaceFlinger_test测试截图.png}
+%     \caption{SurfaceFlinger_test测试截图}
+%     \label{fig:SurfaceFlinger_test测试截图}
+% \end{figure}
+
+
+\subsection{性能测试}
+
+\subsubsection{缓冲区分配​性能}
+
+对系统的缓冲区分配性能进行测试，分别记录每秒平均分配缓冲区、最大和最小的数量，测试项包括各种像素格式，结果如图\ref{fig:缓冲区性能测试图}，像素占用空间为4B如RGBA\_8888、transclucent等
+每秒最低分配数量均超过250，像素占用空间为2B如opaque、RGB\_565等每秒最低分配数量均超过300。
+另测试带宽结果如表\ref{tab:缓冲区性能测试表}，像素占用空间为4B和2B的测试类带宽分别超过2.5Gb/s和5Gb/s，满足设计要求。
+% 包括缓冲区分配延迟、缓冲区导出时间、CPU映射开销等核心实现。使用高精度计时方法clock\_gettime，调用相应的接口并记录耗时，充分运行500次之后，
+% 计算相应结果，其中P95延迟表示95\% 的操作耗时低于这个值，它反映了系统在绝大多数情况下的性能表现，结果如表\ref{tab:​缓冲区分配​时延测试}。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\textwidth]{缓冲区性能测试图.png}
+  \caption{缓冲区性能测试图}
+  \label{fig:缓冲区性能测试图}
+\end{figure}
+
+\begin{table}[H]
+  \centering
+  \caption{缓冲区性能测试表} 
+  \label{tab:缓冲区性能测试表}
+  \begin{tabular}{lll}
+    \toprule
+    测试项 &  存储空间大小(字节B) & 带宽（Gb/s） \\
+    \midrule
+    transclucent & 4 & 3.1 \\
+    transparent & 4 & 3.1 \\
+    opaque & 2 & 6.2 \\
+    RGBA\_8888 & 4 &  3.1\\
+    RGBX\_8888 & 4 & 3.1 \\
+    RGB\_8888 & 4 & 3.1 \\
+    RGB\_565 & 2 & 6.2 \\
+    \bottomrule
+  \end{tabular}
+  \note{}
+\end{table}
+
+% \begin{table}[H]
+%   \centering
+%   \caption{缓冲区分配稳定性测试集及结果} 
+%   \label{tab:​缓冲区分配​时延测试}
+%   \begin{tabular}{llll}
+%     \toprule
+%     测试项 &  平均时间（ms）  &  P95延迟(ms)  & 最大时间(ms) \\
+%     \midrule
+%     缓冲区分配延迟 & 0.4512 & 0.7684 & 0.9137\\
+%     缓冲区导出时间 & 0.0852 & 0.2764 & /\\
+%     CPU映射开销 & 0.3668 & / & /\\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
+
+\subsubsection{GPU图形吞吐能力与命令提交效率}
+
+进一步对GPU的帧渲染能力进行测试，使用AOSP原生测试用例gl2\_perf，提供了不同的着色器以及纹理场景，其中核心的数据包括Mpps（每秒可绘制的百万像素量），主要衡量GPU 填充像素的吞吐量，
+与分辨率、着色器复杂度相关；DC60是在满足60fps的前提下，每帧允许的绘制调用次数，衡量 CPU/GPU 提交绘制命令的效率，测试结果如图\ref{fig:perf测试结果图}和图\ref{fig:perf测试结果图2}。
+Solid color和Solid gradient由于是纯色填充，所以不需要对纹理进行采样，因此仅测试纹理类型2。
+其中纹理类型1的Mpps均超过1200，DC60均超过10，而纹理类型2的Mpps均超过1600，DC60均超过14，两种纹理类型Mpps和DC60均超过1000和10，满足设计要求。
+% 由于硬件设计、工艺制造等诸多方面的限制，目前仅可满足较基础的图形绘制任务。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.7\textwidth]{gl_perf测试结果图.png}
+  \caption{perf测试结果图-Mpps}
+  \label{fig:perf测试结果图}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.6\textwidth]{gl_perf测试结果图2.png}
+  \caption{perf测试结果图-DC60}
+  \label{fig:perf测试结果图2}
+\end{figure}
+
+% \subsubsection{系统资源消耗}
+% 移动端的设备和系统在设计之处就是考虑在有限的资源的性能环境下运行，如较小的系统内存以及处理器运行速度，因此在实现上模块应尽可能少的使用系统资源。在龙芯安卓系统上运行系统时，
+% 在空载的情况下，即运行基本的系统服务，使用top工具查看图形缓存分配模块的系统资源消耗，表\ref{tab:系统资源消耗}所示系统资源消耗情况。
+
+% \begin{table}[H]
+%   \centering
+%   \caption{系统资源消耗统计} 
+%   \label{tab:系统资源消耗}
+%   \begin{tabular}{llll}
+%     \toprule
+%     USER & VIRT & RES & SHR & CPU\% & MEM\%\\
+%     \midrule
+%     system &  & 0.7684 & 0.9137\\
+%     缓冲区导出时间 & 0.0852 & 0.2764 & /\\
+%     CPU映射开销 & 0.3668 & / & /\\
+%     \bottomrule
+%   \end{tabular}
+%   \note{}
+% \end{table}
+
+\subsubsection{CPU端处理开销}
+使用Native OpenGL ES程序测试，在进行测试之前需要先进行预热，
+进行一定次数的渲染以排除硬件和缓冲区等影响。在主测试流程中，主要包括glclear清除颜色缓冲，glDrawArrays绘制基本图元，
+eglSwapBuffers将EGL颜色缓冲区发布到窗口。经测试eglSwapBuffers占据大部分运行时间。
+安卓中的eglSwapBuffers的流程涉及应用层、图形驱动、系统服务及硬件的协同工作，包括应用层调用将当前渲染完成的帧提交给显示系统、
+EGL与BufferQueue 交互并使用SurfaceFlinger完成合成显示，最后提交硬件层处理。
+由于GPU端处理性能有所差异，因此使用零面积三角形类型的图元可以最小化硬件性能差异，主要反映了​图形API调用本身的CPU端开销和驱动层处理机制的效率。
+如图\ref{fig:零面积图元交换缓冲区时间}，在相同的软件环境以及CPU、内存等硬件环境下，AMD R5 520的零面积图元缓冲区交换平均时间为0.51ms，
+而LG110的零面积图元缓冲区交换平均时间为0.492ms，低于1ms，满足设计要求。
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{零面积图元缓冲区交换时间.png}
+    \caption{零面积图元交换缓冲区时间}
+    \label{fig:零面积图元交换缓冲区时间}
+\end{figure}
+
+\subsubsection{tile优化测试}
+
+使用glmark2的复杂纹理资源texture测试项model进行测试，多次测试单帧绘制时间，Tile优化前后数据对比如图\ref{fig:tile优化性能数据}，优化前平均时间为3.523ms，
+优化后平均时间为1.49ms,性能提升约58\%。
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.6\textwidth]{tile优化性能数据.png}
+  \caption{tile优化性能数据}
+  \label{fig:tile优化性能数据}
+\end{figure}
+
+
+% \subsubsection{缓冲区复用验证}
+
+% 使用AOSP中的原生测试用例gl2\_copyTexImage，分别测量帧渲染时间以及交换缓冲区时间。其中帧渲染阶段包括使用FBO（Framebuffer Object）进行离屏渲染，
+% 将FBO内容复制到纹理中并进行渲染。去除预热阶段帧准备不稳定的时间数据，取较为稳定的运行时间的10次作为实验结果，如图\ref{fig:copytex测试结果}。
+% 而帧交换阶段的时间可以明显的看出前4次的时间较长，而在第五次下降到一个极低的时间，这是由于前4次缓冲区未完全复用，会触发新的缓冲区分配，而在第5次时缓冲区复用
+% 进入稳定状态，经测试缓冲区寿命也稳定为2（双缓冲模式），时间也趋于稳定。
+
+% \begin{figure}[h]
+%   \centering
+%   \includegraphics[width=0.8\textwidth]{copytex测试结果.png}
+%   \caption{copytex测试结果}
+%   \label{fig:copytex测试结果}
+% \end{figure}
+
+\section{本章小结}
+本章对系统测试做了全面的介绍。首先介绍测试环境和流程，以及程序调试方法。接着从功能性测试和非功能性测试对系统进行测试，功能性测试包括硬件混合渲染模块以及图形缓存分配模块，非功能性测试包括
+兼容性测试、稳定性测试以及性能测试等，大量使用龙芯以及谷歌官方提供的兼容性测试套件，结果证明系统达到预定的需求目标。
